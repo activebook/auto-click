@@ -33,14 +33,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install platform 36 and build-tools 36.0.0
+      # The runner image already ships an SDK; setup-android@v3 is skipped because it
+      # tries to install the removed `tools` package and fails on current images.
+      - name: Android SDK 36
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
-          echo "$ANDROID_SDK_ROOT/build-tools/36.0.0" >> "$GITHUB_PATH"
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKMGR="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
+          echo "Using $SDKMGR (root $SDK)"
+          [ -n "$SDKMGR" ] || { echo "FAIL: sdkmanager not found"; exit 1; }
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" --install "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -76,14 +80,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install platform 36 and build-tools 36.0.0
+      # The runner image already ships an SDK; setup-android@v3 is skipped because it
+      # tries to install the removed `tools` package and fails on current images.
+      - name: Android SDK 36
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
-          echo "$ANDROID_SDK_ROOT/build-tools/36.0.0" >> "$GITHUB_PATH"
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKMGR="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
+          echo "Using $SDKMGR (root $SDK)"
+          [ -n "$SDKMGR" ] || { echo "FAIL: sdkmanager not found"; exit 1; }
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" --install "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
