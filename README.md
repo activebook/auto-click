@@ -144,3 +144,9 @@ AutoClick has **no internet permission at all** — it physically cannot send an
 - [`docs/PLAN.md`](docs/PLAN.md) — the design record: requirements, decision records, and the round-by-round history of what was tried and rejected
 
 Built for one phone, one job, and no surprises.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). Fork it, change it, ship it; no warranty.
