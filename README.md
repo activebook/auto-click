@@ -142,6 +142,7 @@ AutoClick has **no internet permission at all** — it physically cannot send an
 - [`docs/DESIGN.md`](docs/DESIGN.md) — every screen, dimension, colour and line of copy, including the reasoning behind them
 - [`docs/TECH.md`](docs/TECH.md) — architecture, timing engine, overlay windows, permission plumbing, build and verification
 - [`docs/PLAN.md`](docs/PLAN.md) — the design record: requirements, decision records, and the round-by-round history of what was tried and rejected
+- [`docs/CI.md`](docs/CI.md) — the CI/CD plan: gates, release automation, signing options
 
 Built for one phone, one job, and no surprises.
 

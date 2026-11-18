@@ -461,6 +461,7 @@ auto-click/
 ├─ docs/DESIGN.md                                    product + interaction design
 ├─ docs/TECH.md                                      this file
 ├─ docs/PLAN.md                                      requirements, ADRs, round-by-round history
+├─ docs/CI.md                                        CI/CD plan (gates, release automation, signing)
 ├─ gradle/libs.versions.toml                         pinned, build-verified versions
 └─ README.md                                         what the app is, for a person browsing GitHub
 ```
