@@ -1,3 +1,5 @@
+<img src="docs/assets/icon.png" width="96" height="96" alt="AutoClick icon">
+
 # AutoClick
 
 [![CI](https://github.com/activebook/auto-click/actions/workflows/ci.yml/badge.svg)](https://github.com/activebook/auto-click/actions/workflows/ci.yml)
