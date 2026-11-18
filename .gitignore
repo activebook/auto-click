@@ -1,0 +1,46 @@
+# ---- Build outputs -------------------------------------------------------
+/build/
+*/build/
+.gradle/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+*.class
+
+# ---- Binaries ------------------------------------------------------------
+# Any APK outside dist/ is a build artifact.
+*.apk
+*.aab
+*.ap_
+
+# dist/ holds the download the README points at, so exactly one release APK
+# is tracked. Bump this line when versionName changes.
+/dist/*.apk
+!/dist/AutoClick-1.2.0.apk
+
+# ---- Local configuration and secrets ------------------------------------
+local.properties
+keystore.properties
+*.jks
+*.keystore
+*.p12
+
+# ---- IDE / editor --------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.vscode/
+
+# ---- macOS / OS ----------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+
+# ---- Logs and dumps ------------------------------------------------------
+*.log

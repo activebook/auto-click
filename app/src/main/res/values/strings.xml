@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">AutoClick</string>
+
+    <string name="accessibility_service_label">AutoClick taps</string>
+    <string name="accessibility_service_description">AutoClick uses this service to send a single tap at the screen position you chose, repeating on the interval you set. It never reads what is shown on your screen and never sends your data anywhere.</string>
+
+    <string name="notification_channel_name">AutoClick status</string>
+    <string name="notification_channel_description">Shows whether AutoClick is tapping, with stop controls.</string>
+    <string name="notification_title_idle">AutoClick — idle</string>
+    <string name="notification_title_running">AutoClick — tapping</string>
+    <string name="notification_title_error">AutoClick — stopped</string>
+    <string name="notification_action_stop">Stop</string>
+    <string name="notification_action_start">Start</string>
+
+</resources>
