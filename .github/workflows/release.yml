@@ -132,6 +132,27 @@ jobs:
       - name: Unit tests and lint (same gate as CI)
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
 
+      # The debug keystore is per-machine. Without the project's own key, a CI-built release
+      # cannot install over a build made on the maintainer's laptop (INSTALL_FAILED_UPDATE_INCOMPATIBLE).
+      # The key is supplied as a secret, never committed: it stays a debug key, but it is *our* debug key.
+      - name: Restore the signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::DEBUG_KEYSTORE_BASE64 is unset — this build is signed with the runner's throwaway debug key and will not install over an existing AutoClick."
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > debug-ci.keystore
+          cat > keystore.properties <<EOF
+          storeFile=debug-ci.keystore
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          echo "OK: release signing with the project's debug key"
+
       - name: Assemble release (R8, debug-keystore signed)
         run: ./gradlew :app:assembleRelease --stacktrace
 
@@ -181,3 +202,7 @@ jobs:
             echo "- sha256: \`$(cut -d' ' -f1 dist/SHA256SUMS.txt)\`"
             echo "- published: \`${{ github.event_name == 'push' || inputs.publish }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the signing key
+        if: always()
+        run: rm -f debug-ci.keystore keystore.properties

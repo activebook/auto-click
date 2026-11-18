@@ -109,7 +109,7 @@ reviewed like code. A missing notes file fails the job rather than publishing an
 |---|---|---|
 | Setup | none | `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` in Actions secrets |
 | How | AGP falls back to the debug keystore when `keystore.properties` is absent | CI decodes base64 into `$RUNNER_TEMP/autoclick.jks` and writes a **git-ignored** `keystore.properties` at the repo root before building |
-| Install over existing | yes (same key as debug builds) | only with the same key as previous builds |
+| Install over existing | only if CI carries **this** machine's debug key (see §6.1) — a runner's own debug key cannot | only with the same key as previous builds |
 | Store-grade | no | yes, once the key is generated and **backed up outside the repo** |
 | Risk | anyone can produce a same-key build | losing the key means users must uninstall to take an update |
 
@@ -119,6 +119,30 @@ value and the file is deleted in an `always()` step.
 
 Recommendation: **start with A** (keeps today's install behaviour and needs zero setup), and move to
 B when the app stops being a personal tool. Switching later is a one-time uninstall on the phone.
+
+### 6.1 What A actually requires — verified, not assumed
+
+A debug keystore is generated **per machine** (`~/.android/debug.keystore`). The first CI-built
+release was therefore signed by a completely different key than the build installed on the phone:
+
+```
+runner build   cert SHA-256 1f:b2:5e:24:…   -> INSTALL_FAILED_UPDATE_INCOMPATIBLE over the install
+local  build   cert SHA-256 d9:fd:76:0f:…   -> the cert actually on the device
+```
+
+So "debug key" alone is not enough for a release channel; it has to be **one specific debug key**.
+The pipeline therefore stores it as the repository secret `DEBUG_KEYSTORE_BASE64` (base64 of
+`~/.android/debug.keystore`, alias `androiddebugkey`, password `android`), decodes it to
+`debug-ci.keystore` at the repo root, writes a `keystore.properties` next to it (both git-ignored),
+builds, and deletes both in an `always()` step. If the secret is missing the job still builds, but
+says so in a warning and the artifact is not installable over an existing copy.
+
+Two other facts, measured rather than hoped for:
+
+- Builds from the same commit are **not byte-identical** (zip timestamps differ), so the release hash
+  changes between runs. `SHA256SUMS.txt` is therefore published per run and asserted against the
+  uploaded asset's own digest, not against an older hash.
+- The signed-and-zipaligned APK is ~1.3 MB; the invariant script reports the hash it actually saw.
 
 ## 7. Guardrails worth their cost
 
@@ -179,7 +203,7 @@ everything else can wait.
 
 | Question | Decision |
 |---|---|
-| Signing | **A — debug key**, no secrets. A release built from a clean checkout installs over the previous build because the key is the same |
+| Signing | **A — debug key**, supplied to CI as the `DEBUG_KEYSTORE_BASE64` secret so CI builds carry the same cert as local builds (§6.1) |
 | Publish trigger | **Any `v*.*.*` tag publishes automatically.** `workflow_dispatch` exists only for a re-run / verification, with a `publish` toggle defaulting to off |
 | Invariants in P1 | **Yes — all three** (no INTERNET + designed permissions only, version match, `dist/` holds only the current version) |
 | Dependabot | **P3**, not now |
