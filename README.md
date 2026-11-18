@@ -2,155 +2,43 @@
 
 [![CI](https://github.com/activebook/auto-click/actions/workflows/ci.yml/badge.svg)](https://github.com/activebook/auto-click/actions/workflows/ci.yml)
 
-**Tap the same spot on your screen, over and over, on a timer you set.**
+**Presses one spot on your screen, on a timer you set.**
 
-AutoClick splits the screen into a 3×3 grid. You pick a cell and a number of seconds, press Start,
-and it keeps pressing the centre of that cell while you do something else on your phone.
+Split into a 3×3 grid, pick a cell, pick the seconds, press Start. A small floating hand stays on top
+of every app, so you can start, stop, retarget or change the interval without leaving what you are
+doing. It prints `ON`, `OFF`, `PAUSED` or `DONE` under the glyph, so a glance answers "is it working?".
 
-A small floating hand stays on top of every app so you never have to switch back to AutoClick: tap
-it to start, stop, retarget, or change the interval mid-run.
+Android 8.0+ · English · no network permission · APK, not a store listing.
 
-- Android 8.0 and newer
-- English only
-- No network permission. No ads. No analytics.
-- Sideloaded APK — not on Google Play
+## Install
 
----
+1. Grab `dist/AutoClick-1.3.0.apk` (or the newest release) and open it on the phone.
+2. Allow "Install unknown apps" for the file manager, and on Android 13+ also **Settings → Apps →
+   AutoClick → ⋮ → Allow restricted settings**.
+3. Over USB: `adb install -r dist/AutoClick-1.3.0.apk`.
 
-## Why this one
+Then turn on the two switches it asks for: **Accessibility ("AutoClick taps")** sends the taps,
+**Display over other apps** shows the hand. Both are required; notifications and unrestricted battery
+only make long runs more comfortable. Android lets no app grant these itself, so each button opens
+the owning system screen and the app re-reads the real state on return. The accessibility list
+scrolls itself to AutoClick's row, so you do not have to hunt for it.
 
-There are plenty of auto-clickers. Most of them share three problems; AutoClick was built around
-avoiding them.
+## Use
 
-**It never eats its own tap.** If the floating hand sits over the spot you chose, a tap would land on
-the hand instead of the app underneath — and the loop would look broken while doing nothing.
-AutoClick refuses to start in that case and tells you to drag the hand away. If you drag the hand
-over the target *while* it is running, that tick is skipped and counted instead of being swallowed.
+Pick a cell and an interval (1–3600 s, default 1 s), press **Start tapping**, leave the app. Tap the
+hand for **Play/Stop**, **Settings** (with an **Open** button that brings the full app forward) and
+**Close**. Retargeting or re-timing mid-run applies on the next tick. Set **Stop after** to 100, 500
+or 1000 taps and the run ends itself, leaving the hand in **DONE**.
 
-**The timing does not drift.** Intervals are measured from one fixed starting point, not from
-"now plus one second". An hour at 1 s is still an hour at 1 s, and if Android freezes the app for a
-while you get one clean resume instead of a burst of catch-up taps.
+It refuses to start when the hand covers the target, because that tap would hit the hand and not the
+app under it. While running, ticks the hand crosses are skipped and counted, never silently eaten.
+Timing is anchored to a single start instant, so a long run does not drift.
 
-**It never lies about what is on.** Every switch, badge and counter shows what the system actually
-reports. If tapping stops because a permission was revoked, you get a sentence that names the fix —
-not a bubble that quietly stays green.
+## Docs
 
----
+- [`docs/DESIGN.md`](docs/DESIGN.md) — every screen, dimension and line of copy
+- [`docs/TECH.md`](docs/TECH.md) — engine, overlay windows, permissions, build and verification
+- [`docs/CI.md`](docs/CI.md) — gates and release automation
 
-## What you get
-
-| | |
-|---|---|
-| **Nine-grid targeting** | The screen is divided into nine equal cells. Pick one; the tap lands in its exact centre. Press **Pick on screen** to aim at the real screen with a full-screen grid — what you tap is where it will press. |
-| **Seconds, not guesswork** | 1 s to 3600 s, default 1 s. Quick presets for 1 / 2 / 5 / 10 / 30 / 60 s, or type any value. |
-| **Stops when it is done** | Optional tap budget: `Never`, 100, 500 or 1000 taps. When it is reached the loop ends by itself, the hand turns **DONE**, and the counter stays on screen. |
-| **A floating hand that means something** | 56 dp, translucent, draggable, snaps to the edge, and prints **ON / OFF / PAUSED** under the glyph so a glance answers "is it clicking right now?". |
-| **Controls without leaving the app** | Tap the hand and a compact panel opens beside it: Play/Stop, Settings (target cell and interval), and a Close button that folds it away. Press Start and the panel folds itself away. |
-| **Edits during a run** | Change the cell or the interval while the loop is running. It applies on the next tick; you never have to stop and restart. |
-| **Honest feedback** | A tap counter, a skipped counter, a crosshair ring at the exact point pressed, and an optional short vibration on each tap. |
-| **Pause when the screen is off** | A locked phone is not a useful place to tap. AutoClick pauses when the display sleeps and resumes on unlock. |
-| **Memory** | Cell, interval, tap budget, both feedback toggles and the hand's position survive restarts and updates. |
-
----
-
-## Installing
-
-AutoClick ships as an APK, not through a store.
-
-1. Copy `dist/AutoClick-1.3.0.apk` to the phone (USB, cloud drive, or send it to yourself).
-2. Open it with the file manager and allow "Install unknown apps" for that file manager when asked.
-3. If your phone runs Android 13 or newer, you will also need to allow restricted settings before the
-   accessibility switch can be turned on: **Settings → Apps → AutoClick → ⋮ → Allow restricted
-   settings**.
-
-Prefer a cable? `adb install -r dist/AutoClick-1.3.0.apk` does the same thing.
-
----
-
-## Setting it up
-
-Two permissions are **required**, two are optional, and AutoClick walks you through each with one
-button.
-
-| Permission | What it is for | Needed? |
-|---|---|---|
-| **Accessibility → "AutoClick taps"** | Sends the taps. This is the only way a normal app can press the screen. | yes |
-| **Display over other apps** | Shows the floating hand — the way you start and stop without leaving the app you are tapping in. | yes |
-| **Notifications** | A status line with a Stop button in the shade. | optional |
-| **Battery: unrestricted** | Stops aggressive phone software from killing the service during long runs. | optional |
-
-Until both required switches are on, the Start button stays disabled and an orange button appears
-under Status naming exactly the screen it opens. Tap it, flip the switch, come back — the app
-re-reads the real state and updates itself.
-
-One detail worth knowing: tapping **Enable Accessibility** opens the long accessibility list and
-**scrolls it to AutoClick's own row**, highlighting it. While the list is scrolling you will see two
-brief messages at the top of the screen:
-
-> Finding "AutoClick taps" — please wait
-> Click the highlighted row
-
-That is by design — the list pauses for a moment before it jumps, and those lines explain the wait.
-
-Android does not let an app grant or revoke any of these itself, so the switches in AutoClick are
-remote controls: they open the system screen that owns the setting. The switch always shows the
-system's answer, never a guess.
-
----
-
-## Using it
-
-1. Open AutoClick. Pick a cell in the grid — the middle one is the default — and set the interval.
-2. Press **Start tapping**. The hand turns teal and reads **ON**.
-3. Leave the app. The hand stays on top of whatever you open.
-4. Tap the hand whenever you want: **Play/Stop**, **Settings**, **Minimize**. The settings page also
-   has an **Open** button that brings the full app forward.
-5. Press **Stop** when you are done. Stopping is immediate and final — no queued tap fires afterwards.
-
-Tips:
-
-- If Start refuses with *"The floating hand covers your target"*, drag the hand to another edge and
-  start again.
-- If taps land slightly off in an app with its own layout, use **Pick on screen** and aim at the
-  actual spot.
-- If the hand disappears after a while, the phone's battery optimisation killed the service — set
-  AutoClick to **Unrestricted** and allow autostart in the phone's own settings.
-
----
-
-## Privacy
-
-AutoClick has **no internet permission at all** — it physically cannot send anything anywhere.
-
-- It never reads what is on your screen: the accessibility service is declared without window-content
-  access.
-- It stores only your chosen cell, interval, two feedback toggles and the hand's position, all in a
-  local file on the phone.
-- No ads, no analytics, no third-party SDKs beyond Android's own libraries.
-
----
-
-## Known limits
-
-- **One cell, one interval.** No rotation between cells, no macro recording.
-- **One second is the floor.** No sub-second mode.
-- **No tapping a locked screen.** Pause-on-sleep is intentional.
-- **Updates reset some permissions.** Android unbinds an accessibility service when an app is replaced, and some phones also drop the overlay permission — the app will tell you, and you flip the switches back on.
-- **Not on Google Play.** Accessibility-based tappers generally conflict with store policy, so this is distributed as an APK.
-
----
-
-## More
-
-- [`docs/DESIGN.md`](docs/DESIGN.md) — every screen, dimension, colour and line of copy, including the reasoning behind them
-- [`docs/TECH.md`](docs/TECH.md) — architecture, timing engine, overlay windows, permission plumbing, build and verification
-- [`docs/PLAN.md`](docs/PLAN.md) — the design record: requirements, decision records, and the round-by-round history of what was tried and rejected
-- [`docs/CI.md`](docs/CI.md) — the CI/CD plan: gates, release automation, signing options
-
-Built for one phone, one job, and no surprises.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE). Fork it, change it, ship it; no warranty.
+No internet permission, no ads, no analytics, no screen reading. MIT licensed — see
+[LICENSE](LICENSE).
