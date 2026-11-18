@@ -266,31 +266,16 @@ private fun StatusCard(
             )
         }
 
-        Text(
-            text = when (state) {
-                ClickerState.Idle ->
-                    "${GridGeometry.cellName(config.cellIndex)} · not tapping"
-
-                is ClickerState.Running ->
-                    if (state.paused) {
-                        "Waiting for the screen to unlock (${if (state.tapCount == 1L) "1 tap" else "${state.tapCount} taps"} so far)"
-                    } else {
-                        "${if (state.tapCount == 1L) "1 tap" else "${state.tapCount} taps"} delivered" +
-                            " · ${state.skippedTicks} skipped"
-                    }
-
-                is ClickerState.Finished ->
-                    "Finished · ${state.tapCount} taps delivered · press Start to run again"
-
-                is ClickerState.Error -> failureMessage(state.reason)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (state is ClickerState.Error) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
+        // No status paragraph: the dot and its word already say Idle / Tapping / Finished, and the
+        // button already says what it will do. The line survives only for an error, where it is the
+        // one thing the user cannot infer and cannot act on without reading it.
+        if (state is ClickerState.Error) {
+            Text(
+                text = failureMessage(state.reason),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
         if (state is ClickerState.Error && state.reason == FailureReason.TARGET_COVERED_BY_BUBBLE) {
             Text(

@@ -26,7 +26,6 @@ import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.geometry.ScreenRect
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState
-import com.activebook.autoclick.app.domain.model.TapOutcome
 import com.activebook.autoclick.app.ui.overlay.PanelMode
 import com.activebook.autoclick.app.ui.theme.AutoClickTheme
 import com.activebook.autoclick.app.ui.failureMessage
@@ -130,7 +129,7 @@ class OverlayController(
     private val runningState = mutableStateOf(false)
     private val pausedState = mutableStateOf(false)
     private val finishedState = mutableStateOf(false)
-    private val statusState = mutableStateOf("")
+    private val errorLineState = mutableStateOf<String?>(null)
 
     val isShowing: Boolean get() = bubbleView != null
 
@@ -350,7 +349,7 @@ class OverlayController(
                     mode = panelModeState.value,
                     config = configState.value,
                     running = runningState.value,
-                    status = statusState.value,
+                    errorText = errorLineState.value,
                     onStartStop = {
                         if (runningState.value) {
                             onStopTapping()
@@ -573,7 +572,7 @@ class OverlayController(
         runningState.value = state is ClickerState.Running
         pausedState.value = (state as? ClickerState.Running)?.paused == true
         finishedState.value = state is ClickerState.Finished
-        statusState.value = describe(state, config)
+        errorLineState.value = (state as? ClickerState.Error)?.let { failureMessage(it.reason) }
         configState.value = config
 
         if (state is ClickerState.Running) {
@@ -583,25 +582,6 @@ class OverlayController(
         }
     }
 
-    private fun describe(state: ClickerState, config: ClickerConfig): String = when (state) {
-        ClickerState.Idle ->
-            "Idle · ${GridGeometry.cellName(config.cellIndex)} · every ${config.intervalSeconds}s"
-
-        is ClickerState.Running -> buildString {
-            append("${if (state.tapCount == 1L) "1 tap" else "${state.tapCount} taps"} · every ${config.intervalSeconds}s")
-            if (state.paused) append(" · paused (screen off)")
-            when (state.lastOutcome) {
-                TapOutcome.SKIPPED_BY_BUBBLE -> append(" · bubble covers target")
-                TapOutcome.SKIPPED_IN_FLIGHT, TapOutcome.CANCELLED -> append(" · taps skipped")
-                else -> Unit
-            }
-        }
-
-        is ClickerState.Finished ->
-            "Done · ${state.tapCount} ${if (state.tapCount == 1L) "tap" else "taps"} · stopped by itself"
-
-        is ClickerState.Error -> failureMessage(state.reason)
-    }
 
     private fun flashTap(point: ScreenPoint) {
         val config = configFlow.value

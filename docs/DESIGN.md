@@ -170,10 +170,10 @@ pages and no other chrome.
 | Button 1 | Play / Stop. `primaryContainer` when idle, `errorContainer` when running. Semantics: `Start tapping` / `Stop tapping` |
 | Button 2 | Sliders glyph, `surfaceVariant`. Opens the settings page. Semantics: `Settings` |
 | Button 3 | Chevron-down, `surfaceVariant`. Collapses to the hand. Semantics: `Minimize controls` |
-| Status line | `labelSmall`, max 2 lines, ellipsised. Reads like `Idle · Row 2, column 2 (center) · every 1s`, or the live counters while running, or the failure sentence |
+| Error line | **Nothing by default.** The three buttons already say what the panel can do, so a permanent status line was pure repetition and height. A line appears *only* when a failure needs words (`labelSmall`, `error` colour, max 2 lines, ellipsised) |
 
 Auto-minimise: **160 ms after a *successful* Start** the panel collapses itself. A *refused* start
-leaves the panel open with the reason in the status line — folding it away would hide the only
+leaves the panel open with the reason on the error line — folding it away would hide the only
 explanation.
 
 ### 5.2 Settings page (inside the panel)
@@ -216,7 +216,7 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | # | Section | Content |
 |---|---|---|
 | 1 | Header | 48 dp `primary` disc with the hand glyph + `AutoClick` (`headlineSmall`) + `Nine-grid auto tap` |
-| 2 | **Status** | State dot + one of `Tapping` / `Paused` / `Needs attention` / `Idle`; right side `Every 3s`; detail line (`Row 2, column 2 (center) · not tapping`, `51 taps delivered · 0 skipped`, `Waiting for the screen to unlock (4 taps so far)`, or a failure sentence); the primary **Start tapping / Stop tapping** button (52 dp, full width) |
+| 2 | **Status** | State dot + one of `Tapping` / `Paused` / `Finished` / `Needs attention` / `Idle`; right side `Every 3s`; **no detail paragraph** — the word and the button already say everything, and a failure sentence appears only on error; the primary **Start tapping / Stop tapping** button (52 dp, full width) |
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
 | 5 | **Target cell** | 132 dp nine-grid + cell name + `Pick on screen` |
@@ -340,7 +340,7 @@ Two details worth keeping in the UI:
 | Surface | Text |
 |---|---|
 | Hand label | `ON` / `OFF` / `PAUSED` |
-| Panel status | `Idle · Row 2, column 2 (center) · every 1s` while idle; `n taps delivered · n skipped` while running; `Done · n taps · stopped by itself` after a budget run; the failure sentence on error |
+| Panel status | **none** while idle, running or finished — the play/stop glyph carries the state; the failure sentence appears only on error |
 | App status detail | Same counters; `Waiting for the screen to unlock (n taps so far)` while paused |
 | Notification title | `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — stopped` |
 | Notification text | `Ready · every 3s` / `Paused while the screen is off · 5 taps so far` |
@@ -457,7 +457,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 **Panel**
 
 - `Settings` · `Open` · `Done` · `Target cell` · `Every` · `Row 3, column 2 · 5s`
-- Status line: `Idle · Row 2, column 2 (center) · every 1s`, counters, `Finished · 500 taps delivered · press Start to run again`, or a failure sentence
+- Status detail: **absent** by design; only a failure sentence is rendered (`Needs attention` state)
 - Content descriptions: `Start tapping` / `Stop tapping`, `Settings`, `Minimize controls`,
   `Open the app`, `Close settings`, `Decrease interval`, `Increase interval`
 

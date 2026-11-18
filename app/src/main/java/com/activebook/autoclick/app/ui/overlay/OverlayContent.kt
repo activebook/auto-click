@@ -177,13 +177,13 @@ fun BubbleContent(
 /** What the expanded overlay panel is currently showing. */
 enum class PanelMode { CONTROLS, SETTINGS }
 
-/** Expanded control surface: start/stop, settings, collapse — plus a one-line status. */
+/** Expanded control surface: start/stop, settings, collapse. Nothing else — the buttons say the rest. */
 @Composable
 fun PanelContent(
     mode: PanelMode,
     config: ClickerConfig,
     running: Boolean,
-    status: String,
+    errorText: String?,
     onStartStop: () -> Unit,
     onToggleSettings: () -> Unit,
     onCollapse: () -> Unit,
@@ -248,15 +248,20 @@ fun PanelContent(
                 ) { color -> ChevronDownGlyph(color = color) }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = status,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            )
+            // Only a failure gets a line here. A permanent "Idle · Row 2, column 2 · every 1s"
+            // repeated what the play button and the settings page already show, and it made the
+            // panel taller for no information.
+            if (errorText != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = errorText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }
