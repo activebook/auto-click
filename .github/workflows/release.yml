@@ -117,6 +117,18 @@ jobs:
             exit 1
           fi
 
+      # The gate itself comes from trunk, not from the tag: a tag can predate a check
+      # (v1.2.0 predates scripts/verify-apk.sh), and the checks that matter are the
+      # current ones, while the artifact is whatever that tag built.
+      - name: Prepare the artifact gate from trunk
+        id: gates
+        run: |
+          git show origin/main:scripts/verify-apk.sh > "$RUNNER_TEMP/verify-apk.sh"
+          chmod +x "$RUNNER_TEMP/verify-apk.sh"
+          echo "path=$RUNNER_TEMP/verify-apk.sh" >> "$GITHUB_OUTPUT"
+          sha256sum "$RUNNER_TEMP/verify-apk.sh"
+          echo "OK: gate script taken from main"
+
       - name: Unit tests and lint (same gate as CI)
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
 
@@ -124,7 +136,7 @@ jobs:
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Invariants — artifact is honest
-        run: ./scripts/verify-apk.sh "dist/AutoClick-${{ steps.version.outputs.name }}.apk" "${{ steps.version.outputs.name }}" "${{ steps.version.outputs.code }}" --release
+        run: "${{ steps.gates.outputs.path }}" "dist/AutoClick-${{ steps.version.outputs.name }}.apk" "${{ steps.version.outputs.name }}" "${{ steps.version.outputs.code }}" --release
 
       - name: Checksums
         run: |

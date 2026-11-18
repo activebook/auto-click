@@ -95,6 +95,11 @@ flowchart LR
 | Checksums | `sha256sum dist/*.apk > SHA256SUMS.txt` | Attached to the release; the local file already has a recorded hash |
 | Publish | `gh release create "$GITHUB_REF_NAME" --notes-file … dist/AutoClick-<version>.apk SHA256SUMS.txt` | Uses the built-in `GITHUB_TOKEN`, `permissions: contents: write`; if the release exists, `gh release upload --clobber` |
 
+Two things are deliberately read from **`main`, not from the tag**: the release notes and
+`scripts/verify-apk.sh` itself. A tag can predate a check or a notes file (`v1.2.0` predates both),
+and the checks that matter are the current ones while the artifact is whatever that tag built. The
+run emits a warning when the fallback fires.
+
 Release notes source: **`docs/releases/<version>.md`**, written when the version is bumped and
 reviewed like code. A missing notes file fails the job rather than publishing an empty release.
 
