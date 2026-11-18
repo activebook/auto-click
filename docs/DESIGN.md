@@ -189,7 +189,7 @@ they are tapping.
 | `Done` | Filled `primaryContainer` pill: returns to the controls page |
 | Target cell | `Target cell` label + a nine-grid filling the panel width, **150 dp** tall |
 | Interval | `Every` label, `−` / `+` 38 dp step buttons around a 46 dp read-out (`3s`), clamped at 1 s and 3600 s (disabled, not hidden) |
-| Summary | `labelSmall` line under the stepper: `Row 3, column 2 · 5s` |
+| Summary | **none** — the grid shows the cell, the stepper shows the seconds; a `Row 3, column 2 · 5s` echo was the third copy of the same two facts |
 
 ### 5.3 Anchoring rules (the panel must stay beside the hand)
 
@@ -456,7 +456,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 
 **Panel**
 
-- `Settings` · `Open` · `Done` · `Target cell` · `Every` · `Row 3, column 2 · 5s`
+- `Settings` · `Open` · `Done` · `Target cell` · `Every`
 - Status detail: **absent** by design; only a failure sentence is rendered (`Needs attention` state)
 - Content descriptions: `Start tapping` / `Stop tapping`, `Settings`, `Minimize controls`,
   `Open the app`, `Close settings`, `Decrease interval`, `Increase interval`

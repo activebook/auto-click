@@ -41,7 +41,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.activebook.autoclick.app.domain.model.ClickerConfig
-import com.activebook.autoclick.app.domain.geometry.GridGeometry
 import com.activebook.autoclick.app.ui.components.ChevronDownGlyph
 import com.activebook.autoclick.app.ui.components.NineGrid
 import com.activebook.autoclick.app.ui.components.HandGlyph
@@ -411,11 +410,6 @@ private fun SettingsPanel(
                 }
             }
 
-            Text(
-                text = GridGeometry.cellName(config.cellIndex) + " \u00b7 " + config.intervalSeconds + "s",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
