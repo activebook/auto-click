@@ -1,5 +1,7 @@
 # AutoClick
 
+[![CI](https://github.com/activebook/auto-click/actions/workflows/ci.yml/badge.svg)](https://github.com/activebook/auto-click/actions/workflows/ci.yml)
+
 **Tap the same spot on your screen, over and over, on a timer you set.**
 
 AutoClick splits the screen into a 3×3 grid. You pick a cell and a number of seconds, press Start,

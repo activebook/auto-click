@@ -210,14 +210,38 @@ everything else can wait.
 
 ---
 
-## Appendix — proposed file set (not yet committed)
+## 12. Live evidence
+
+| Run | What it proved |
+|---|---|
+| [44305156114](https://github.com/activebook/auto-click/actions/runs/44305156114) | `check` + `assemble` green in 2 min 9 s on `main`; the debug artifact passed all three invariants |
+| [44305203342](https://github.com/activebook/auto-click/actions/runs/44305203342) | `release` dry-run (`publish=false`): tag↔version guard, trunk guard, notes fallback, R8 build, artifact verified — nothing published |
+| [44305860615](https://github.com/activebook/auto-click/actions/runs/44305860615) | Existing release → `gh release upload --clobber` + notes edit; `SHA256SUMS.txt` added |
+| [44306991417](https://github.com/activebook/auto-click/actions/runs/44306991417) | Build signed with the project's key: cert `d9:fd:76:0f:…`, identical to the installed app |
+| — | `adb install -r` of the resulting asset over the installed build: `Success`, `lastUpdateTime` moved to 20:48 |
+
+Three failures were found and fixed on the way, each a real design lesson rather than a typo:
+
+1. `android-actions/setup-android@v3` installs the removed `tools` package and dies on current
+   images → use the SDK the runner already ships, install only `platforms;android-36` and
+   `build-tools;36.0.0`.
+2. A `run:` value starting with `"` parses as a quoted scalar with trailing text → the **whole**
+   workflow file is invalid, GitHub silently drops every trigger (the workflow still appears in the
+   list, named by its path) → `scripts/check-workflows.py` now gates workflow YAML on every run.
+3. A tag can predate the checks and the notes → gates and notes come from `main`, the artifact from
+   the tag; the fallback is a visible warning, not a silent pass.
+
+## Appendix — file set
 
 ```
 .github/
 ├─ workflows/
-│  ├─ ci.yml        # check + assemble on PR / push / schedule
-│  └─ release.yml   # tag guard, signed build, publish
-└─ dependabot.yml   # gradle + github-actions, weekly (P3)
+│  ├─ ci.yml        # check + assemble on PR / push / schedule, artifact invariants
+│  └─ release.yml   # tag guards, key restore, R8 build, verify, publish
+└─ dependabot.yml   # gradle + github-actions, weekly (P3, not yet added)
 docs/releases/
 └─ 1.2.0.md        # release notes, reviewed like code
+scripts/
+├─ verify-apk.sh    # the artifact gate (also usable by hand)
+└─ check-workflows.py
 ```
