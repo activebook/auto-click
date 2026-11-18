@@ -1,8 +1,8 @@
 # CI/CD Plan — AutoClick
 
-**Status: proposed, not yet implemented.** No file under `.github/workflows/` exists yet; this
-document is the thing to approve before any YAML is committed. Decisions that need you are listed in
-§11.
+**Status: P1 and P2 implemented** in `.github/workflows/ci.yml` and `.github/workflows/release.yml`,
+with the shared artifact check in `scripts/verify-apk.sh`. Decisions taken are recorded at the end of
+§11; P3 (real keystore, Dependabot) is still ahead.
 
 Repo: `activebook/auto-click` (public, MIT). Toolchain: AGP 8.13.0, Gradle 8.14.3, Kotlin 2.2.21,
 `compileSdk 36`, JDK 17+ (verified locally with Temurin 21).
@@ -169,6 +169,15 @@ B when the app stops being a personal tool. Switching later is a one-time uninst
 My recommendation: **A → auto-publish on tag → invariants from day one → Dependabot in P3.** The
 invariants are two seconds each and they are the only automated defence of the app's privacy claim;
 everything else can wait.
+
+### Decisions taken
+
+| Question | Decision |
+|---|---|
+| Signing | **A — debug key**, no secrets. A release built from a clean checkout installs over the previous build because the key is the same |
+| Publish trigger | **Any `v*.*.*` tag publishes automatically.** `workflow_dispatch` exists only for a re-run / verification, with a `publish` toggle defaulting to off |
+| Invariants in P1 | **Yes — all three** (no INTERNET + designed permissions only, version match, `dist/` holds only the current version) |
+| Dependabot | **P3**, not now |
 
 ---
 
