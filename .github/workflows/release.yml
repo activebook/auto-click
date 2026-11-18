@@ -93,14 +93,29 @@ jobs:
           fi
           echo "OK: ${{ steps.tag.outputs.tag }} is on main"
 
+      # Notes live next to the code that ships them. A tag created before the notes file
+      # existed (v1.2.0 predates docs/releases/) falls back to the copy on main, which is
+      # still reviewed — but the run says so loudly instead of silently pretending.
       - name: Guard — release notes exist
+        id: notes
         run: |
-          NOTES="docs/releases/${{ steps.version.outputs.name }}.md"
-          if [ ! -s "$NOTES" ]; then
-            echo "FAIL: $NOTES is missing. Release notes are reviewed like code."
+          V="${{ steps.version.outputs.name }}"
+          NOTES="docs/releases/${V}.md"
+          if [ -s "$NOTES" ]; then
+            echo "path=$NOTES" >> "$GITHUB_OUTPUT"
+            echo "OK: using $NOTES (from the tag)"
+          elif git cat-file -e "origin/main:$NOTES" 2>/dev/null; then
+            git show "origin/main:$NOTES" > "$RUNNER_TEMP/notes-${V}.md"
+            echo "path=$RUNNER_TEMP/notes-${V}.md" >> "$GITHUB_OUTPUT"
+            echo "::warning::$NOTES is not in ${{ steps.tag.outputs.tag }}; using the copy on main"
+            {
+              echo "> **Note** release notes were taken from \`main\`, not from the tag,"
+              echo "> because this tag predates \`$NOTES\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "FAIL: $NOTES is missing on the tag and on main. Notes are reviewed like code."
             exit 1
           fi
-          echo "OK: using $NOTES"
 
       - name: Unit tests and lint (same gate as CI)
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
@@ -124,7 +139,7 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           V="${{ steps.version.outputs.name }}"
-          NOTES="docs/releases/${V}.md"
+          NOTES="${{ steps.notes.outputs.path }}"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             echo "Release $TAG exists — updating assets and notes"
             gh release upload "$TAG" "dist/AutoClick-${V}.apk" dist/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
