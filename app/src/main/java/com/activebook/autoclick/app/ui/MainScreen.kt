@@ -31,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -68,6 +69,9 @@ private val SystemTrack = Color(0xFFD9D9D9)
 
 private val INTERVAL_PRESETS = listOf(1, 2, 5, 10, 30, 60)
 
+/** Off, then three round numbers. A budget is a "set it and forget it" value, not a slider. */
+private val TAP_BUDGET_PRESETS = listOf(0, 100, 500, 1000)
+
 @Composable
 fun MainScreen(
     config: ClickerConfig,
@@ -77,6 +81,7 @@ fun MainScreen(
     onStop: () -> Unit,
     onCellSelected: (Int) -> Unit,
     onIntervalSeconds: (Int) -> Unit,
+    onStopAfterTaps: (Int) -> Unit,
     onHaptics: (Boolean) -> Unit,
     onFlash: (Boolean) -> Unit,
     onOpenAccessibility: () -> Unit,
@@ -172,7 +177,11 @@ fun MainScreen(
             }
         }
 
-        IntervalCard(config = config, onIntervalSeconds = onIntervalSeconds)
+        IntervalCard(
+            config = config,
+            onIntervalSeconds = onIntervalSeconds,
+            onStopAfterTaps = onStopAfterTaps,
+        )
 
         AdvancedCard(
             config = config,
@@ -237,6 +246,7 @@ private fun StatusCard(
             val (dotColor, headline) = when {
                 running && (state as ClickerState.Running).paused -> WarningAmber to "Paused"
                 running -> SuccessGreen to "Tapping"
+                state is ClickerState.Finished -> SuccessGreen to "Finished"
                 state is ClickerState.Error -> MaterialTheme.colorScheme.error to "Needs attention"
                 else -> MaterialTheme.colorScheme.onSurfaceVariant to "Idle"
             }
@@ -268,6 +278,9 @@ private fun StatusCard(
                         "${if (state.tapCount == 1L) "1 tap" else "${state.tapCount} taps"} delivered" +
                             " · ${state.skippedTicks} skipped"
                     }
+
+                is ClickerState.Finished ->
+                    "Finished · ${state.tapCount} taps delivered · press Start to run again"
 
                 is ClickerState.Error -> failureMessage(state.reason)
             },
@@ -557,6 +570,7 @@ private fun AdvancedCard(
 private fun IntervalCard(
     config: ClickerConfig,
     onIntervalSeconds: (Int) -> Unit,
+    onStopAfterTaps: (Int) -> Unit,
 ) {
     var text by remember(config.intervalSeconds) { mutableStateOf(config.intervalSeconds.toString()) }
     val parsed = text.toIntOrNull()
@@ -612,6 +626,50 @@ private fun IntervalCard(
 
         Text(
             text = "${ClickerConfig.MIN_INTERVAL_SECONDS}–${ClickerConfig.MAX_INTERVAL_SECONDS} s",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+        Text(
+            text = "Stop after",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TAP_BUDGET_PRESETS.forEach { preset ->
+                AssistChip(
+                    onClick = { onStopAfterTaps(preset) },
+                    label = {
+                        Text(
+                            when (preset) {
+                                0 -> "Never"
+                                else -> "$preset"
+                            },
+                        )
+                    },
+                    colors = if (preset == config.stopAfterTaps) {
+                        AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    } else {
+                        AssistChipDefaults.assistChipColors()
+                    },
+                )
+            }
+        }
+        Text(
+            text = if (config.stopAfterTaps == ClickerConfig.NO_TAP_BUDGET) {
+                "Runs until you stop it."
+            } else {
+                "Stops by itself after ${config.stopAfterTaps} taps."
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

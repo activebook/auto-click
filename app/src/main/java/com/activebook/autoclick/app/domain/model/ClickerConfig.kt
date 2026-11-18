@@ -13,6 +13,8 @@ import com.activebook.autoclick.app.domain.geometry.GridGeometry
 data class ClickerConfig(
     val cellIndex: Int,
     val intervalMs: Long,
+    /** Stop by itself after this many delivered taps. 0 means "until the user stops it". */
+    val stopAfterTaps: Int,
     val hapticOnTap: Boolean,
     val flashOnTap: Boolean,
 ) {
@@ -33,9 +35,15 @@ data class ClickerConfig(
 
         const val DEFAULT_CELL_INDEX = GridGeometry.CENTER_CELL_INDEX
 
+        /** 0 = no budget. The upper bound only exists to keep the number sane in a text field. */
+        const val NO_TAP_BUDGET = 0
+        const val MAX_STOP_AFTER_TAPS = 100_000
+        const val DEFAULT_STOP_AFTER_TAPS = NO_TAP_BUDGET
+
         val Default = ClickerConfig(
             cellIndex = DEFAULT_CELL_INDEX,
             intervalMs = DEFAULT_INTERVAL_MS,
+            stopAfterTaps = DEFAULT_STOP_AFTER_TAPS,
             hapticOnTap = true,
             flashOnTap = true,
         )
@@ -44,11 +52,13 @@ data class ClickerConfig(
         fun of(
             cellIndex: Int,
             intervalMs: Long,
+            stopAfterTaps: Int,
             hapticOnTap: Boolean,
             flashOnTap: Boolean,
         ): ClickerConfig = ClickerConfig(
             cellIndex = cellIndex.coerceIn(0, GridGeometry.CELL_COUNT - 1),
             intervalMs = intervalMs.coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS),
+            stopAfterTaps = stopAfterTaps.coerceIn(NO_TAP_BUDGET, MAX_STOP_AFTER_TAPS),
             hapticOnTap = hapticOnTap,
             flashOnTap = flashOnTap,
         )
@@ -56,11 +66,13 @@ data class ClickerConfig(
         fun ofSeconds(
             cellIndex: Int,
             intervalSeconds: Int,
+            stopAfterTaps: Int,
             hapticOnTap: Boolean,
             flashOnTap: Boolean,
         ): ClickerConfig = of(
             cellIndex = cellIndex,
             intervalMs = intervalSeconds.toLong() * MS_PER_SECOND,
+            stopAfterTaps = stopAfterTaps,
             hapticOnTap = hapticOnTap,
             flashOnTap = flashOnTap,
         )

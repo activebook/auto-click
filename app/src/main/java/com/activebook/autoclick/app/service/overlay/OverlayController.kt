@@ -129,6 +129,7 @@ class OverlayController(
 
     private val runningState = mutableStateOf(false)
     private val pausedState = mutableStateOf(false)
+    private val finishedState = mutableStateOf(false)
     private val statusState = mutableStateOf("")
 
     val isShowing: Boolean get() = bubbleView != null
@@ -194,6 +195,7 @@ class OverlayController(
                 BubbleContent(
                     running = runningState.value,
                     paused = pausedState.value,
+                    finished = finishedState.value,
                     onDragStart = { x, y ->
                         dragDownScreenX = x
                         dragDownScreenY = y
@@ -381,6 +383,7 @@ class OverlayController(
                                         ClickerConfig.MIN_INTERVAL_SECONDS,
                                         ClickerConfig.MAX_INTERVAL_SECONDS,
                                     ),
+                                stopAfterTaps = config.stopAfterTaps,
                                 hapticOnTap = config.hapticOnTap,
                                 flashOnTap = config.flashOnTap,
                             )
@@ -569,6 +572,7 @@ class OverlayController(
     private fun render(state: ClickerState, config: ClickerConfig) {
         runningState.value = state is ClickerState.Running
         pausedState.value = (state as? ClickerState.Running)?.paused == true
+        finishedState.value = state is ClickerState.Finished
         statusState.value = describe(state, config)
         configState.value = config
 
@@ -592,6 +596,9 @@ class OverlayController(
                 else -> Unit
             }
         }
+
+        is ClickerState.Finished ->
+            "Done · ${state.tapCount} ${if (state.tapCount == 1L) "tap" else "taps"} · stopped by itself"
 
         is ClickerState.Error -> failureMessage(state.reason)
     }

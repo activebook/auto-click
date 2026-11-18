@@ -64,6 +64,7 @@ class GridPickerActivity : ComponentActivity() {
                                 ClickerConfig.ofSeconds(
                                     cellIndex = index,
                                     intervalSeconds = current.intervalSeconds,
+                                    stopAfterTaps = current.stopAfterTaps,
                                     hapticOnTap = current.hapticOnTap,
                                     flashOnTap = current.flashOnTap,
                                 ),

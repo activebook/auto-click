@@ -42,6 +42,15 @@ sealed interface ClickerState {
         val paused: Boolean,
     ) : ClickerState
 
+    /**
+     * The session ended by itself because it reached the tap budget. Distinct from [Idle] so the
+     * bubble can say "DONE" and the counter stays visible instead of silently reading "OFF".
+     */
+    data class Finished(
+        val tapCount: Long,
+        val skippedTicks: Long,
+    ) : ClickerState
+
     data class Error(
         val reason: FailureReason,
         val detail: String? = null,

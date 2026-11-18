@@ -43,12 +43,13 @@ not a bubble that quietly stays green.
 |---|---|
 | **Nine-grid targeting** | The screen is divided into nine equal cells. Pick one; the tap lands in its exact centre. Press **Pick on screen** to aim at the real screen with a full-screen grid — what you tap is where it will press. |
 | **Seconds, not guesswork** | 1 s to 3600 s, default 1 s. Quick presets for 1 / 2 / 5 / 10 / 30 / 60 s, or type any value. |
+| **Stops when it is done** | Optional tap budget: `Never`, 100, 500 or 1000 taps. When it is reached the loop ends by itself, the hand turns **DONE**, and the counter stays on screen. |
 | **A floating hand that means something** | 56 dp, translucent, draggable, snaps to the edge, and prints **ON / OFF / PAUSED** under the glyph so a glance answers "is it clicking right now?". |
 | **Controls without leaving the app** | Tap the hand and a compact panel opens beside it: Play/Stop, Settings (target cell and interval), Minimize. Press Start and the panel folds itself away. |
 | **Edits during a run** | Change the cell or the interval while the loop is running. It applies on the next tick; you never have to stop and restart. |
 | **Honest feedback** | A tap counter, a skipped counter, a crosshair ring at the exact point pressed, and an optional short vibration on each tap. |
 | **Pause when the screen is off** | A locked phone is not a useful place to tap. AutoClick pauses when the display sleeps and resumes on unlock. |
-| **Memory** | Cell, interval, both feedback toggles and the hand's position survive restarts and updates. |
+| **Memory** | Cell, interval, tap budget, both feedback toggles and the hand's position survive restarts and updates. |
 
 ---
 
@@ -56,13 +57,13 @@ not a bubble that quietly stays green.
 
 AutoClick ships as an APK, not through a store.
 
-1. Copy `dist/AutoClick-1.2.0.apk` to the phone (USB, cloud drive, or send it to yourself).
+1. Copy `dist/AutoClick-1.3.0.apk` to the phone (USB, cloud drive, or send it to yourself).
 2. Open it with the file manager and allow "Install unknown apps" for that file manager when asked.
 3. If your phone runs Android 13 or newer, you will also need to allow restricted settings before the
    accessibility switch can be turned on: **Settings → Apps → AutoClick → ⋮ → Allow restricted
    settings**.
 
-Prefer a cable? `adb install -r dist/AutoClick-1.2.0.apk` does the same thing.
+Prefer a cable? `adb install -r dist/AutoClick-1.3.0.apk` does the same thing.
 
 ---
 

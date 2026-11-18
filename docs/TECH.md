@@ -21,7 +21,7 @@ every approach that was measured and rejected — is in [`PLAN.md`](PLAN.md).
 | minSdk | **26** | Floor for `TYPE_APPLICATION_OVERLAY` and for a modern `dispatchGesture` baseline |
 | UI | Jetpack Compose, **BOM 2025.06.01**, Material 3 | One design system for activities *and* overlay windows |
 | core-ktx / activity-compose / lifecycle | **1.16.0** / **1.10.1** / **2.9.1** | Pinned to the resolvable set (see AGP row) |
-| DataStore (preferences) | **1.1.7** | Six scalar keys; no DB needed |
+| DataStore (preferences) | **1.1.7** | Seven scalar keys; no DB needed |
 | Coroutines | **1.10.2** | `StateFlow` + `Flow` plumbing |
 | Tests | JUnit 4.13.2, `kotlinx-coroutines-test` | Domain is pure Kotlin, so no Robolectric on the gate |
 | DI | Manual `AppContainer` | Five collaborators; Hilt's annotation processing is not worth it |
@@ -118,13 +118,18 @@ boolean anywhere in the app.
 - interval is clamped by `ClickerConfig.of` to `1..3600 s`, so the rebase branch cannot be entered by
   a zero/negative value.
 
-`ClickerCoordinator` adds three correctness guards:
+`ClickerCoordinator` adds four correctness guards:
 
 | Guard | Mechanism | Failure it prevents |
 |---|---|---|
 | One gesture in flight | `AtomicBoolean` CAS before dispatch | Overlapping gestures when the interval is shorter than the round-trip |
 | One live session | monotonically increasing `generation`; late callbacks compare their captured generation | A tap landing after Stop |
 | Honest skip counter | covered target, in-flight tick and cancelled gesture all increment `skippedTicks` | A silent no-op that looks like a working loop |
+| Budget counts deliveries | the counter is incremented in the gesture callback, after `TapResult.DELIVERED` | A skipped or cancelled tick ending the run short of the number the user asked for |
+
+A session with a budget ends in `ClickerState.Finished`: the ticker is stopped, the generation bumped,
+and the counters are frozen so the hand can say `DONE` instead of silently reading `OFF`. Lowering the
+budget under a session that already spent it ends it immediately, inside `applyConfig`.
 
 Stroke duration is **55 ms** (`TAP_DURATION_MS`), coerced into `20 ms … 60 s` by the sink — long
 enough to be a tap, short enough not to read as a long-press.
@@ -257,18 +262,20 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
 
 ## 7. Persistence
 
-`ClickerConfigRepository` over DataStore Preferences — six keys, all scalar:
+`ClickerConfigRepository` over DataStore Preferences — seven keys, all scalar:
 
 | Key | Type | Default |
 |---|---|---|
 | `cell_index` | Int | `4` (center) |
 | `interval_ms` | Long | `1000` |
+| `stop_after_taps` | Int | `0` (no budget) |
 | `haptic_on_tap` | Boolean | `true` |
 | `flash_on_tap` | Boolean | `true` |
 | `bubble_x` / `bubble_y` | Int | last drag position |
 
-Every read funnels through `ClickerConfig.of(...)`, which clamps cell into `0..8` and interval into
-`1..3600 s` — a corrupted or hand-edited preference file cannot produce a zero interval. **No pixel
+Every read funnels through `ClickerConfig.of(...)`, which clamps cell into `0..8`, interval into
+`1..3600 s` and the tap budget into `0..100 000` — a corrupted or hand-edited preference file cannot
+produce a zero interval or a negative budget. **No pixel
 coordinate is ever stored.** Two processes never write concurrently: the service writes bubble
 position, the activity writes config, both through the same repository instance.
 
@@ -341,7 +348,7 @@ the whole hand-off.
 ## 9. Build, versioning, artifacts
 
 ```bash
-./gradlew :app:testDebugUnitTest   # 37 tests
+./gradlew :app:testDebugUnitTest   # 43 tests
 ./gradlew :app:lintDebug           # 0 errors
 ./gradlew :app:assembleDebug       # debug APK  (+ refresh dist/AutoClick-<version>-debug.apk)
 ./gradlew :app:assembleRelease     # R8 release  (+ refresh dist/AutoClick-<version>.apk)
@@ -369,7 +376,7 @@ the whole hand-off.
 
 | Gate | Result |
 |---|---|
-| `:app:testDebugUnitTest` | **37 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest` |
+| `:app:testDebugUnitTest` | **43 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest` |
 | `:app:lintDebug` | **0 errors**; 18 warnings, all "newer version available" hints |
 
 What the unit tests actually pin: nine cells tile exactly and centres sit at 1/6, 3/6, 5/6; insets
@@ -418,7 +425,8 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 001 | Taps via `AccessibilityService.dispatchGesture`, never root/adb/reflection | Accepted |
 | 002 | One FGS + one AccessibilityService + process-singleton coordinator; single process | Accepted |
 | 003 | Compose for app *and* overlay, hosted by `ComposeView` + `OverlayLifecycleOwner` | Accepted |
-| 004 | DataStore Preferences for six scalar keys | Accepted |
+| 004 | DataStore Preferences for seven scalar keys | Accepted |
+| 019 | Tap budget counted in delivered taps, surfaced as its own `Finished` state | Accepted — `Idle` would make a completed run look like a never-started one |
 | 005 | Store a cell index, resolve pixels at fire time from current metrics | Accepted |
 | 006 | Anchored `HandlerThread` scheduling, rebase on over-long stalls, no `AlarmManager` | Accepted |
 | 007 | Never swallow own taps — **replaced**: refuse at start, skip at runtime (no window-flag dance) | Superseded by PLAN §15.2 |
@@ -455,7 +463,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 ```
 auto-click/
 ├─ app/src/main/java/com/activebook/autoclick/app/   domain / core / data / platform / service / ui
-├─ app/src/test/java/...                             4 test classes, 37 JVM tests
+├─ app/src/test/java/...                             4 test classes, 43 JVM tests
 ├─ app/src/main/res/                                 strings (English), themes, icons, XML configs
 ├─ dist/                                             AutoClick-1.2.0.apk and -debug.apk (copies)
 ├─ docs/DESIGN.md                                    product + interaction design

@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
                     onStop = { container.coordinator.stop() },
                     onCellSelected = { index -> applyConfig(cell = index) },
                     onIntervalSeconds = { seconds -> applyConfig(seconds = seconds) },
+                    onStopAfterTaps = { taps -> applyConfig(stopAfterTaps = taps) },
                     onHaptics = { enabled -> applyConfig(haptic = enabled) },
                     onFlash = { enabled -> applyConfig(flash = enabled) },
                     onOpenAccessibility = ::openAccessibility,
@@ -159,6 +160,7 @@ class MainActivity : ComponentActivity() {
     private fun applyConfig(
         cell: Int? = null,
         seconds: Int? = null,
+        stopAfterTaps: Int? = null,
         haptic: Boolean? = null,
         flash: Boolean? = null,
     ) {
@@ -166,6 +168,7 @@ class MainActivity : ComponentActivity() {
         val next = ClickerConfig.ofSeconds(
             cellIndex = cell ?: current.cellIndex,
             intervalSeconds = seconds ?: current.intervalSeconds,
+            stopAfterTaps = stopAfterTaps ?: current.stopAfterTaps,
             hapticOnTap = haptic ?: current.hapticOnTap,
             flashOnTap = flash ?: current.flashOnTap,
         )

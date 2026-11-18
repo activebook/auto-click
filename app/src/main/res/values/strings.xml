@@ -9,6 +9,7 @@
     <string name="notification_title_idle">AutoClick — idle</string>
     <string name="notification_title_running">AutoClick — tapping</string>
     <string name="notification_title_error">AutoClick — stopped</string>
+    <string name="notification_title_finished">AutoClick — finished</string>
     <string name="notification_action_stop">Stop</string>
     <string name="notification_action_start">Start</string>
 

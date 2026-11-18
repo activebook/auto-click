@@ -54,6 +54,7 @@ class ClickerCoordinator(
     private var generation = 0L
     private var sessionCellIndex = ClickerConfig.DEFAULT_CELL_INDEX
     private var sessionIntervalMs = ClickerConfig.DEFAULT_INTERVAL_MS
+    private var sessionBudget = ClickerConfig.DEFAULT_STOP_AFTER_TAPS
     private var startedAtUptime = 0L
     private var paused = false
     private var lastOutcome = TapOutcome.NONE
@@ -105,6 +106,7 @@ class ClickerCoordinator(
             val sessionGeneration = generation
             sessionCellIndex = config.cellIndex
             sessionIntervalMs = config.intervalMs
+            sessionBudget = config.stopAfterTaps
             startedAtUptime = clock()
             paused = false
             lastOutcome = TapOutcome.NONE
@@ -183,6 +185,14 @@ class ClickerCoordinator(
                 // Not running (or paused): the next start() uses the latest config anyway.
                 sessionCellIndex = config.cellIndex
                 sessionIntervalMs = config.intervalMs
+                sessionBudget = config.stopAfterTaps
+                return
+            }
+            sessionBudget = config.stopAfterTaps
+            // Lowering the budget under a session that already spent it ends the session now,
+            // rather than delivering one more tap the user just said they did not want.
+            if (sessionBudget > 0 && tapCount.get() >= sessionBudget.toLong()) {
+                finishLocked()
                 return
             }
             if (config.cellIndex == sessionCellIndex && config.intervalMs == sessionIntervalMs) {
@@ -304,8 +314,14 @@ class ClickerCoordinator(
                     tapCount.incrementAndGet()
                     lastOutcome = TapOutcome.DELIVERED
                     lastTapAtUptime = clock()
-                    publishRunningLocked()
                     _tapEvents.tryEmit(point)
+                    // The budget is counted in *delivered* taps, not ticks: a skipped tick must not
+                    // push the finish line, or the run would end short of what the user asked for.
+                    if (sessionBudget > 0 && tapCount.get() >= sessionBudget.toLong()) {
+                        finishLocked()
+                    } else {
+                        publishRunningLocked()
+                    }
                 }
 
                 TapResult.CANCELLED -> {
@@ -315,6 +331,20 @@ class ClickerCoordinator(
                 }
             }
         }
+    }
+
+    /** Ends a session because it reached its tap budget. The counters survive in [ClickerState.Finished]. */
+    private fun finishLocked() {
+        val oldTicker = ticker
+        ticker = null
+        generation += 1
+        paused = false
+        inFlight.set(false)
+        oldTicker?.stop()
+        _state.value = ClickerState.Finished(
+            tapCount = tapCount.get(),
+            skippedTicks = skippedTicks.get(),
+        )
     }
 
     private fun failLocked(reason: FailureReason, detail: String? = null) {

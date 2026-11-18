@@ -57,6 +57,7 @@ import com.activebook.autoclick.app.ui.components.StopGlyph
 fun BubbleContent(
     running: Boolean,
     paused: Boolean,
+    finished: Boolean,
     onDragStart: (Float, Float) -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
@@ -135,10 +136,10 @@ fun BubbleContent(
                 }
             }
             .semantics {
-                contentDescription = if (running) {
-                    "AutoClick is tapping. Tap to open controls."
-                } else {
-                    "AutoClick is idle. Tap to open controls."
+                contentDescription = when {
+                    running -> "AutoClick is tapping. Tap to open controls."
+                    finished -> "AutoClick finished its tap budget. Tap to open controls."
+                    else -> "AutoClick is idle. Tap to open controls."
                 }
             },
         contentAlignment = Alignment.Center,
@@ -155,6 +156,7 @@ fun BubbleContent(
                 text = when {
                     paused -> "PAUSED"
                     running -> "ON"
+                    finished -> "DONE"
                     else -> "OFF"
                 },
                 style = MaterialTheme.typography.labelSmall.copy(
@@ -162,7 +164,11 @@ fun BubbleContent(
                     letterSpacing = 0.6.sp,
                     fontWeight = FontWeight.Bold,
                 ),
-                color = if (paused) Color(0xFFB45309) else glyphColor,
+                color = when {
+                    paused -> Color(0xFFB45309)
+                    finished -> Color(0xFF1B7F3B)
+                    else -> glyphColor
+                },
             )
         }
     }

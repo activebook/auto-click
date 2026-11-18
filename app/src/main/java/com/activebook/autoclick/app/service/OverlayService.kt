@@ -238,6 +238,7 @@ class OverlayService : Service() {
         val title = when (state) {
             ClickerState.Idle -> getString(R.string.notification_title_idle)
             is ClickerState.Running -> getString(R.string.notification_title_running)
+            is ClickerState.Finished -> getString(R.string.notification_title_finished)
             is ClickerState.Error -> getString(R.string.notification_title_error)
         }
         val text = when (state) {
@@ -254,6 +255,9 @@ class OverlayService : Service() {
                 } else {
                     "${tapLabel(state.tapCount)} · every ${config.intervalSeconds}s"
                 }
+
+            is ClickerState.Finished ->
+                "Finished its tap budget · ${tapLabel(state.tapCount)} delivered · tap Start to run again"
 
             is ClickerState.Error -> failureMessage(state.reason)
         }

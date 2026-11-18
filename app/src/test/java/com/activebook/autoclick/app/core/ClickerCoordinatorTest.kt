@@ -117,7 +117,7 @@ class ClickerCoordinatorTest {
 
     @Test
     fun `top left cell taps one sixth in`() {
-        val harness = Harness(ClickerConfig.ofSeconds(cellIndex = 0, intervalSeconds = 1, hapticOnTap = true, flashOnTap = true))
+        val harness = Harness(ClickerConfig.ofSeconds(cellIndex = 0, intervalSeconds = 1, stopAfterTaps = 0, hapticOnTap = true, flashOnTap = true))
         harness.coordinator.start()
         harness.tickers.single().fire()
 
@@ -214,7 +214,7 @@ class ClickerCoordinatorTest {
         harness.tickers.single().fire()
         harness.sink.deliverLatest()
 
-        val newConfig = ClickerConfig.ofSeconds(cellIndex = 2, intervalSeconds = 3, hapticOnTap = true, flashOnTap = true)
+        val newConfig = ClickerConfig.ofSeconds(cellIndex = 2, intervalSeconds = 3, stopAfterTaps = 0, hapticOnTap = true, flashOnTap = true)
         harness.config = newConfig
         harness.coordinator.applyConfig(newConfig)
 
@@ -227,7 +227,7 @@ class ClickerCoordinatorTest {
     @Test
     fun `applyConfig is a no-op while idle`() {
         val harness = Harness()
-        harness.config = ClickerConfig.ofSeconds(8, 10, true, true)
+        harness.config = ClickerConfig.ofSeconds(8, 10, 0, true, true)
         harness.coordinator.applyConfig(harness.config)
 
         assertTrue(harness.tickers.isEmpty())
@@ -281,5 +281,76 @@ class ClickerCoordinatorTest {
         harness.coordinator.acknowledgeError()
 
         assertEquals(ClickerState.Idle, harness.state)
+    }
+
+    @Test
+    fun `tap budget ends the session after the exact number of delivered taps`() {
+        val harness = Harness(ClickerConfig.ofSeconds(4, 1, 3, true, true))
+        harness.coordinator.start()
+
+        repeat(3) {
+            harness.tickers.single().fire()
+            harness.sink.deliverLatest()
+        }
+
+        val state = harness.state
+        assertTrue(state is ClickerState.Finished)
+        assertEquals(3L, (state as ClickerState.Finished).tapCount)
+        assertEquals(3, harness.sink.taps.size)
+        assertTrue(harness.tickers.single().stopped)
+
+        // A tick that arrives after the budget was spent must not produce a fourth tap.
+        harness.tickers.single().fire()
+        assertEquals(3, harness.sink.taps.size)
+    }
+
+    @Test
+    fun `a skipped tick does not spend the budget`() {
+        val harness = Harness(ClickerConfig.ofSeconds(4, 1, 2, true, true))
+        harness.coordinator.start()
+        val ticker = harness.tickers.single()
+
+        ticker.fire()
+        harness.sink.deliverLatest()
+        ticker.fire() // in flight, no result yet -> skipped
+        ticker.fire() // still in flight -> skipped
+        harness.sink.deliverLatest()
+
+        val state = harness.state
+        assertTrue(state is ClickerState.Finished)
+        assertEquals(2L, (state as ClickerState.Finished).tapCount)
+    }
+
+    @Test
+    fun `lowering the budget below the spent count stops the session immediately`() {
+        val harness = Harness()
+        harness.coordinator.start()
+        repeat(3) {
+            harness.tickers.single().fire()
+            harness.sink.deliverLatest()
+        }
+        assertEquals(3L, (harness.state as ClickerState.Running).tapCount)
+
+        val tightened = ClickerConfig.ofSeconds(4, 1, 2, true, true)
+        harness.config = tightened
+        harness.coordinator.applyConfig(tightened)
+
+        val state = harness.state
+        assertTrue(state is ClickerState.Finished)
+        assertEquals(3L, (state as ClickerState.Finished).tapCount)
+        assertTrue(harness.tickers.single().stopped)
+    }
+
+    @Test
+    fun `start after finishing begins a fresh session`() {
+        val harness = Harness(ClickerConfig.ofSeconds(4, 1, 1, true, true))
+        harness.coordinator.start()
+        harness.tickers.single().fire()
+        harness.sink.deliverLatest()
+        assertTrue(harness.state is ClickerState.Finished)
+
+        harness.coordinator.start()
+        assertEquals(2, harness.tickers.size)
+        assertEquals(0L, (harness.state as ClickerState.Running).tapCount)
     }
 }

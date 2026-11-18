@@ -129,7 +129,7 @@ for one outcome would eventually disagree (this was tried and removed — see PL
 | Shadow | **none** | Compose paints a shaped shadow as an elevation halo around the *view*; around a circle that reads as a pale rectangular plate. Removed on purpose |
 | Glyph | Hand, 24 dp, in `onPrimary` (running) / `onSurface` (idle) | — |
 | Label | Under the glyph, **9 sp** bold, letter spacing 0.6: `ON` / `OFF` / `PAUSED` | A dot alone never told the user whether the loop was live, and vanished when idle. `PAUSED` is `#B45309` |
-| Semantics | `AutoClick is tapping. Tap to open controls.` / `AutoClick is idle. Tap to open controls.` | Screen readers get the state *and* the affordance |
+| Semantics | `AutoClick is tapping. Tap to open controls.` / `AutoClick finished its tap budget. Tap to open controls.` / `AutoClick is idle. Tap to open controls.` | Screen readers get the state *and* the affordance |
 
 ### 4.2 Behaviour
 
@@ -220,7 +220,7 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
 | 5 | **Target cell** | 132 dp nine-grid + cell name + `Pick on screen` |
-| 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s` |
+| 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 100 / 500 / 1000` and one explanatory line |
 | 7 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |
 | 8 | **Before you start** *(when complete)* | The same card, now collapsed to `All set`, at the bottom of the page |
 | 9 | Footer | `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.` |
@@ -245,6 +245,7 @@ do.
 | Running, not paused | `#15803D` green | `Tapping` |
 | Running, paused (screen off) | `#B45309` amber | `Paused` |
 | Error | `error` | `Needs attention` |
+| Finished | `#15803D` green | `Finished` |
 | Idle | `onSurfaceVariant` | `Idle` |
 
 ---
@@ -339,7 +340,7 @@ Two details worth keeping in the UI:
 | Surface | Text |
 |---|---|
 | Hand label | `ON` / `OFF` / `PAUSED` |
-| Panel status | `Idle · Row 2, column 2 (center) · every 1s` while idle; `n taps delivered · n skipped` while running; the failure sentence on error |
+| Panel status | `Idle · Row 2, column 2 (center) · every 1s` while idle; `n taps delivered · n skipped` while running; `Done · n taps · stopped by itself` after a budget run; the failure sentence on error |
 | App status detail | Same counters; `Waiting for the screen to unlock (n taps so far)` while paused |
 | Notification title | `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — stopped` |
 | Notification text | `Ready · every 3s` / `Paused while the screen is off · 5 taps so far` |
@@ -437,7 +438,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 **App**
 
 - `AutoClick` · `Nine-grid auto tap`
-- `Status` · `Tapping` · `Paused` · `Needs attention` · `Idle` · `Every 3s`
+- `Status` · `Tapping` · `Paused` · `Finished` · `Needs attention` · `Idle` · `Every 3s`
 - `Start tapping` · `Stop tapping`
 - `Tapping needs both of these:` · `Enable Accessibility` · `Enable Display over other apps`
 - `Before you start` · `Two are required. Tap a switch to open its system screen.` · `n of 4` · `All set`
@@ -446,6 +447,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 - `Greyed out? App info › Allow restricted settings.`
 - `Target cell` · `Where the tap lands: the screen is split into nine cells.` · `Pick on screen`
 - `Interval` · `Seconds to wait between two taps.` · `Seconds` · `Apply` · `1–3600 s` · `1s 2s 5s 10s 30s 60s`
+- `Stop after` · `Never` · `100` · `500` · `1000` · `Runs until you stop it.` · `Stops by itself after 500 taps.`
 - `Advanced` · `Feedback while it runs. Both on by default.` · `All on` / `Some off`
 - `Vibrate` · `A short buzz on every tap.` · `Flash marker` · `A ring at the point you just tapped.`
 - `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.`
@@ -455,7 +457,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 **Panel**
 
 - `Settings` · `Open` · `Done` · `Target cell` · `Every` · `Row 3, column 2 · 5s`
-- Status line: `Idle · Row 2, column 2 (center) · every 1s`, counters, or a failure sentence
+- Status line: `Idle · Row 2, column 2 (center) · every 1s`, counters, `Finished · 500 taps delivered · press Start to run again`, or a failure sentence
 - Content descriptions: `Start tapping` / `Stop tapping`, `Settings`, `Minimize controls`,
   `Open the app`, `Close settings`, `Decrease interval`, `Increase interval`
 
@@ -497,6 +499,8 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 | Paused | Unlock | Running | Resumes on the same interval; no burst of catch-up taps |
 | Running | Hand dragged onto target | Running (skipping) | `n skipped` climbs, taps keep going elsewhere |
 | Running | Accessibility revoked / service killed | Error | `Needs attention`, scheduler stopped, sentence names the fix |
+| Running | Delivered tap reaches the budget | Finished | Hand → `DONE` (green), scheduler stopped, counters frozen, `Finished · n taps delivered · press Start to run again` |
+| Finished | Start | Running | Fresh counters, budget re-armed |
 | Error | User fixes it and presses Start | Running | Normal run |
 
 Every surface renders from one state object, so the hand, the panel, the notification and the app can

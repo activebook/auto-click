@@ -50,6 +50,7 @@ class ClickerConfigRepository(context: Context) {
         dataStore.edit { preferences ->
             preferences[Keys.CELL_INDEX] = config.cellIndex
             preferences[Keys.INTERVAL_MS] = config.intervalMs
+            preferences[Keys.STOP_AFTER_TAPS] = config.stopAfterTaps
             preferences[Keys.HAPTIC] = config.hapticOnTap
             preferences[Keys.FLASH] = config.flashOnTap
         }
@@ -65,6 +66,7 @@ class ClickerConfigRepository(context: Context) {
     private fun Preferences.toConfig(): ClickerConfig = ClickerConfig.of(
         cellIndex = this[Keys.CELL_INDEX] ?: ClickerConfig.DEFAULT_CELL_INDEX,
         intervalMs = this[Keys.INTERVAL_MS] ?: ClickerConfig.DEFAULT_INTERVAL_MS,
+        stopAfterTaps = this[Keys.STOP_AFTER_TAPS] ?: ClickerConfig.DEFAULT_STOP_AFTER_TAPS,
         hapticOnTap = this[Keys.HAPTIC] ?: true,
         flashOnTap = this[Keys.FLASH] ?: true,
     )
@@ -72,6 +74,7 @@ class ClickerConfigRepository(context: Context) {
     private object Keys {
         val CELL_INDEX = intPreferencesKey("cell_index")
         val INTERVAL_MS = longPreferencesKey("interval_ms")
+        val STOP_AFTER_TAPS = intPreferencesKey("stop_after_taps")
         val HAPTIC = booleanPreferencesKey("haptic_on_tap")
         val FLASH = booleanPreferencesKey("flash_on_tap")
         val BUBBLE_X = intPreferencesKey("bubble_x")
