@@ -136,7 +136,12 @@ jobs:
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Invariants — artifact is honest
-        run: "${{ steps.gates.outputs.path }}" "dist/AutoClick-${{ steps.version.outputs.name }}.apk" "${{ steps.version.outputs.name }}" "${{ steps.version.outputs.code }}" --release
+        run: |
+          "${{ steps.gates.outputs.path }}" \
+            "dist/AutoClick-${{ steps.version.outputs.name }}.apk" \
+            "${{ steps.version.outputs.name }}" \
+            "${{ steps.version.outputs.code }}" \
+            --release
 
       - name: Checksums
         run: |
