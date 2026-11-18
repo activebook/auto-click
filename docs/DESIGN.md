@@ -169,7 +169,7 @@ pages and no other chrome.
 | Row | Three 46 dp circular buttons, evenly spaced |
 | Button 1 | Play / Stop. `primaryContainer` when idle, `errorContainer` when running. Semantics: `Start tapping` / `Stop tapping` |
 | Button 2 | Sliders glyph, `surfaceVariant`. Opens the settings page. Semantics: `Settings` |
-| Button 3 | Chevron-down, `surfaceVariant`. Collapses to the hand. Semantics: `Minimize controls` |
+| Button 3 | **Close glyph (X)**, `surfaceVariant`. Closes the panel back to the hand. An X, not a chevron: a chevron promises "more below", which the panel does not have. Semantics: `Close panel` |
 | Error line | **Nothing by default.** The three buttons already say what the panel can do, so a permanent status line was pure repetition and height. A line appears *only* when a failure needs words (`labelSmall`, `error` colour, max 2 lines, ellipsised) |
 
 Auto-minimise: **160 ms after a *successful* Start** the panel collapses itself. A *refused* start
@@ -458,7 +458,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 
 - `Settings` · `Open` · `Done` · `Target cell` · `Every`
 - Status detail: **absent** by design; only a failure sentence is rendered (`Needs attention` state)
-- Content descriptions: `Start tapping` / `Stop tapping`, `Settings`, `Minimize controls`,
+- Content descriptions: `Start tapping` / `Stop tapping`, `Settings`, `Close panel`,
   `Open the app`, `Close settings`, `Decrease interval`, `Increase interval`
 
 **Picker**
@@ -529,7 +529,7 @@ never disagree.
 | Element | Provision |
 |---|---|
 | Hand | `contentDescription` carries the run state + the tap affordance |
-| Panel buttons | Every icon button has a `contentDescription` (`Start tapping`, `Settings`, `Minimize controls`) |
+| Panel buttons | Every icon button has a `contentDescription` (`Start tapping`, `Settings`, `Close panel`) |
 | Pills / step buttons | `Open the app`, `Close settings`, `Decrease interval`, `Increase interval` |
 | Cells | Number labels are always drawn; the selected cell keeps its number under the crosshair |
 | Contrast | Accent `#0F766E` on white and white on accent both clear 4.5:1; panel text sits on α 0.90 surface, which keeps it above 4.5:1 over busy hosts |

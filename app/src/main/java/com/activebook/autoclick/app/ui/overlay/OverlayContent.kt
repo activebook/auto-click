@@ -41,7 +41,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.activebook.autoclick.app.domain.model.ClickerConfig
-import com.activebook.autoclick.app.ui.components.ChevronDownGlyph
+import com.activebook.autoclick.app.ui.components.CloseGlyph
 import com.activebook.autoclick.app.ui.components.NineGrid
 import com.activebook.autoclick.app.ui.components.HandGlyph
 import com.activebook.autoclick.app.ui.components.PlayGlyph
@@ -239,12 +239,15 @@ fun PanelContent(
                     onClick = onToggleSettings,
                 ) { color -> SlidersGlyph(color = color) }
 
+                // An X, not a chevron. A chevron reads as "there is more below me" — the wrong
+                // promise for a panel that has nothing below it; the third button closes the panel
+                // and leaves the hand, which is exactly what an X means.
                 PanelButton(
-                    description = "Minimize controls",
+                    description = "Close panel",
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     onClick = onCollapse,
-                ) { color -> ChevronDownGlyph(color = color) }
+                ) { color -> CloseGlyph(color = color) }
             }
 
             // Only a failure gets a line here. A permanent "Idle · Row 2, column 2 · every 1s"

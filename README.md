@@ -45,7 +45,7 @@ not a bubble that quietly stays green.
 | **Seconds, not guesswork** | 1 s to 3600 s, default 1 s. Quick presets for 1 / 2 / 5 / 10 / 30 / 60 s, or type any value. |
 | **Stops when it is done** | Optional tap budget: `Never`, 100, 500 or 1000 taps. When it is reached the loop ends by itself, the hand turns **DONE**, and the counter stays on screen. |
 | **A floating hand that means something** | 56 dp, translucent, draggable, snaps to the edge, and prints **ON / OFF / PAUSED** under the glyph so a glance answers "is it clicking right now?". |
-| **Controls without leaving the app** | Tap the hand and a compact panel opens beside it: Play/Stop, Settings (target cell and interval), Minimize. Press Start and the panel folds itself away. |
+| **Controls without leaving the app** | Tap the hand and a compact panel opens beside it: Play/Stop, Settings (target cell and interval), and a Close button that folds it away. Press Start and the panel folds itself away. |
 | **Edits during a run** | Change the cell or the interval while the loop is running. It applies on the next tick; you never have to stop and restart. |
 | **Honest feedback** | A tap counter, a skipped counter, a crosshair ring at the exact point pressed, and an optional short vibration on each tap. |
 | **Pause when the screen is off** | A locked phone is not a useful place to tap. AutoClick pauses when the display sleeps and resumes on unlock. |
