@@ -99,7 +99,7 @@ cover the **real** display edge to edge:
 |---|---|
 | Zones | The real usable area, `2 dp` inset, nine thirds, light scrim `#99101618` over the app beneath so the target app stays readable |
 | Labels | `headlineSmall` numbers; the selected zone keeps its number *under* the crosshair so it is never a blank block |
-| Hint bar | Top-centre, `RoundedCornerShape(16.dp)`, `#F2101A1C`. Line 1 `Tap the third of the screen to press`, line 2 `Currently Row 2, column 2 (center) · zones match the real screen`, a `Cancel` text button, and below them the mode chips `Cell` / `Exact` |
+| Hint bar | Top-centre, `RoundedCornerShape(14.dp)`, `#E6101A1C`. **One** 30 dp row: chips `Cell` / `Exact` on the left, `Cancel` on the right, and a single-line hint underneath that retires after 2.6 s — leaving a 42 dp bar. Two lines of prose that never left were rejected: they covered the top of the screen, which is exactly where people aim |
 | Selection (Cell) | Tapping a zone writes the cell index and closes the activity immediately |
 | Exact mode | The third lines stay as faint guides, a crosshair follows the finger, and releasing commits the touch point as a fraction of the same usable area. Hint text switches to `Tap the exact spot to press` / `A fixed screen position · it does not follow page scrolling` |
 | Mode switch | Explicit, and it opens on whatever mode is live. No snapping: "near a centre means the cell" would silently rewrite a deliberate pixel the user could neither see nor undo |
@@ -480,13 +480,8 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 
 **Picker**
 
-- `Tap the third of the screen to press` · `Tap the exact spot to press`
-- `Currently Row 2, column 2 (center) · zones match the real screen` · `A fixed screen position · it does not follow page scrolling`
-- `Cell` · `Exact` · `Exact · 52% · 38%` · `Cancel`
-
-- `Tap the third of the screen to press`
-- `Currently Row 1, column 1 · zones match the real screen`
-- `Cancel`
+- `Tap a third of the screen to press its centre` · `Tap the exact spot to press — a fixed screen position`
+- `Cell` · `Exact` · `Cancel` — and nothing else: the chip row is the only chrome that stays
 
 **System surfaces**
 
