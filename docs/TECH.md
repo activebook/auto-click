@@ -79,8 +79,7 @@ com.activebook.autoclick.app
 ├── service/
 │   ├── accessibility/  AutoClickAccessibilityService, AccessibilityClickSink
 │   ├── overlay/        OverlayController, OverlayLifecycleOwner, CrosshairView
-│   ├── OverlayService.kt
-│   └── HintTrace.kt (debug-only breadcrumb file; inert in release)
+│   └── OverlayService.kt
 ├── ui/            MainActivity, MainScreen, PermissionSnapshot, FailureMessages, theme, components
 │   ├── overlay/   OverlayContent (BubbleContent, PanelContent, SettingsPanel, PanelMode)
 │   └── grid/      GridPickerActivity
@@ -202,6 +201,13 @@ Three windows, never more. Every `WindowManager` call happens on the main thread
 All are `PixelFormat.TRANSLUCENT`, `gravity = TOP|START`, and clamped into the usable area
 (`edgeMarginPx = 12 dp`). No `FLAG_DIM_BEHIND` and no `FLAG_WATCH_OUTSIDE_TOUCH` — the panel closes
 from its own chevron, and a dim scrim was explicitly rejected by the product owner.
+
+The hand also carries a **countdown ring** (1.6.0): a Compose `Canvas` arc at the disc perimeter,
+animated 0 → 1 over one interval by an `Animatable`. It is reset by a `mutableLongStateOf` tap
+counter that `OverlayController` increments on every `coordinator.tapEvents` emission — the *same*
+delivered-tap signal that drives the crosshair flash — so the ring completes exactly as the next tap
+lands instead of drifting on a separate timer. It renders only while `Running && !paused`, and
+re-times when the interval changes mid-run. See DESIGN §4.4.
 
 ### 5.1 Compose inside a raw window
 
@@ -362,7 +368,7 @@ the whole hand-off.
 ## 9. Build, versioning, artifacts
 
 ```bash
-./gradlew :app:testDebugUnitTest   # 60 tests
+./gradlew :app:testDebugUnitTest   # 56 tests
 ./gradlew :app:lintDebug           # 0 errors
 ./gradlew :app:assembleDebug       # debug APK  (+ refresh dist/AutoClick-<version>-debug.apk)
 ./gradlew :app:assembleRelease     # R8 release  (+ refresh dist/AutoClick-<version>.apk)
@@ -390,10 +396,10 @@ the whole hand-off.
 
 | Gate | Result |
 |---|---|
-| `:app:testDebugUnitTest` | **60 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest` |
-| `:app:lintDebug` | **0 errors**; 18 warnings, all "newer version available" hints |
+| `:app:testDebugUnitTest` | **56 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest` |
+| `:app:lintDebug` | **0 errors, 0 hints**; 14 warnings — dependency-version notices and the battery-exemption policy note |
 
-What the unit tests actually pin: nine cells tile exactly and centres sit at 1/6, 3/6, 5/6; insets
+What the unit tests actually pin: cell centres sit at 1/6, 3/6, 5/6 of the usable area; insets
 and degenerate areas produce no NaN; 1000 ticks at a fixed interval equal `anchor + n·interval`;
 a single over-long stall produces exactly one rebase and no burst; config clamping rejects zero and
 out-of-range values; a late gesture callback after `stop()` cannot increment `tapCount`; a
@@ -417,9 +423,10 @@ disconnected sink surfaces as `Error`, not a crash.
 
 ### 10.3 Debugging on an OEM that hides logcat
 
-`HintTrace` writes a line-per-event breadcrumb to `files/hint_trace.log` for debug builds only (vivo
-drops the app's own `Log.d`). Release builds are not debuggable, so `run-as` and this file are
-unavailable there by design.
+This OEM drops the app's own `Log.d`, so on-device behaviour is pinned with `dumpsys` and
+`uiautomator` rather than logcat. A temporary file-trace helper was used while developing the
+accessibility hand-off and has since been removed; release builds are not debuggable, so `run-as`
+is unavailable there by design.
 
 Useful dumpsys fields, in order of usefulness:
 
@@ -455,6 +462,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 016 | The hand's existence is the overlay permission, not a preference | Accepted |
 | 017 | Hand-off notice as an overlay window | **Superseded** — force-hidden on that screen |
 | 018 | Hand-off notice as two text Toasts | Accepted |
+| 020 | Countdown ring driven by delivered-tap events (`tapEvents`), not a separate timer | Accepted — a second timer would drift out of step with the real taps |
 
 ---
 
@@ -477,7 +485,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 ```
 auto-click/
 ├─ app/src/main/java/com/activebook/autoclick/app/   domain / core / data / platform / service / ui
-├─ app/src/test/java/...                             6 test classes, 60 JVM tests
+├─ app/src/test/java/...                             6 test classes, 56 JVM tests
 ├─ app/src/main/res/                                 strings (English), themes, icons, XML configs
 ├─ dist/                                             AutoClick-1.2.0.apk and -debug.apk (copies)
 ├─ docs/DESIGN.md                                    product + interaction design

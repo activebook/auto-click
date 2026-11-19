@@ -257,7 +257,7 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
 | 5 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Its centre is pressed.`, then `Pick a cell` / `Pick exact spot`; in exact mode a pin instead of a highlight and `Exact spot` + `65% · 34% from the top-left of the screen` |
-| 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 100 / 500 / 1000` and one explanatory line |
+| 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 1 / 3 / 5 / 10 / 100`, a `Taps` field + `Apply` (`0–100000 taps · 0 = never`), and one explanatory line |
 | 7 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |
 | 8 | **Before you start** *(when complete)* | The same card, now collapsed to `All set`, at the bottom of the page |
 | 9 | Footer | `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.` |
@@ -488,7 +488,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 - `Greyed out? App info › Allow restricted settings.`
 - `Where to tap` · `A cell centre, or any spot you point at.` · `Pick a cell` · `Pick exact spot` · `Exact spot` · `65% · 34% from the top-left of the screen`
 - `Interval` · `Seconds to wait between two taps.` · `Seconds` · `Apply` · `1–3600 s` · `1s 2s 5s 10s 30s 60s`
-- `Stop after` · `Never` · `100` · `500` · `1000` · `Runs until you stop it.` · `Stops by itself after 500 taps.`
+- `Stop after` · `Never` · `1` · `3` · `5` · `10` · `100` · `Taps` · `Apply` · `0–100000 taps · 0 = never` · `Runs until you stop it.` · `Stops by itself after 100 taps.`
 - `Advanced` · `Feedback while it runs. Both on by default.` · `All on` / `Some off`
 - `Vibrate` · `A short buzz on every tap.` · `Flash marker` · `A ring at the point you just tapped.`
 - `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.`
