@@ -57,6 +57,7 @@ import com.activebook.autoclick.app.domain.model.ClickerState
 import com.activebook.autoclick.app.ui.components.ChevronDownGlyph
 import com.activebook.autoclick.app.ui.components.HandGlyph
 import com.activebook.autoclick.app.ui.components.NineGrid
+import kotlin.math.roundToInt
 import com.activebook.autoclick.app.domain.model.FailureReason
 
 private val SuccessGreen = Color(0xFF15803D)
@@ -91,6 +92,7 @@ fun MainScreen(
     onToggleNotifications: (Boolean) -> Unit,
     onToggleBattery: (Boolean) -> Unit,
     onPickOnScreen: () -> Unit,
+    onUseGridTarget: () -> Unit,
 ) {
     val running = state is ClickerState.Running
     // Two switches actually gate tapping: Access for the tap itself, and Display over other apps
@@ -144,8 +146,12 @@ fun MainScreen(
         if (!allPermissions) permissionsSection()
 
         SectionCard(
-            title = "Target cell",
-            subtitle = "Where the tap lands: the screen is split into nine cells.",
+            title = "Where to tap",
+            subtitle = if (config.isExactPoint) {
+                "One fixed spot on the screen."
+            } else {
+                "One cell of a 3x3 grid; the tap lands in its centre."
+            },
         ) {
             // Compact on purpose: this is an indicator of *where* the tap lands, not a control
             // surface the size of the screen. A small square next to the description reads faster.
@@ -156,6 +162,7 @@ fun MainScreen(
                 NineGrid(
                     selectedIndex = config.cellIndex,
                     onSelect = onCellSelected,
+                    pointMarker = if (config.isExactPoint) config.point else null,
                     modifier = Modifier.size(132.dp),
                 )
 
@@ -163,15 +170,34 @@ fun MainScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = GridGeometry.cellName(config.cellIndex),
+                        text = if (config.isExactPoint) {
+                            "Exact spot"
+                        } else {
+                            GridGeometry.cellName(config.cellIndex)
+                        },
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
+                    if (config.isExactPoint) {
+                        Text(
+                            text = percentOf(config.point.x) + " · " + percentOf(config.point.y),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     TextButton(
                         onClick = onPickOnScreen,
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
                     ) {
-                        Text("Pick on screen")
+                        Text(if (config.isExactPoint) "Pick another spot" else "Pick on screen")
+                    }
+                    if (config.isExactPoint) {
+                        TextButton(
+                            onClick = onUseGridTarget,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        ) {
+                            Text("Back to grid centres")
+                        }
                     }
                 }
             }
@@ -718,3 +744,6 @@ private fun SectionCard(
         }
     }
 }
+
+/** "52%" — two digits are enough to tell two spots apart and never look like a precision claim. */
+private fun percentOf(fraction: Float): String = (fraction * 100f).roundToInt().toString() + "%"

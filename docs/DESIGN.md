@@ -80,6 +80,18 @@ the selected cell outlined with the accent colour and its number kept visible. B
 name and a `Pick on screen` text button. Compact on purpose — this is an *indicator of where the tap
 lands*, not a control surface the size of the screen.
 
+**A2. Exact spot (precision).** Any row of the card can also hold a *point* instead of a cell: the
+grid then shows a **pin** at that spot and no cell is highlighted, the card reads `Exact spot` with
+the spot's percentages underneath, and two text buttons appear — `Pick another spot` and
+`Back to grid centres`. Tapping any cell in the grid also goes back to coarse aiming, so leaving
+exact mode never needs a separate control. A pin is deliberately *not* snapped to the nearest cell:
+that would show a cell while the engine pressed a pixel.
+
+**Precise points are fractions of the usable area** (`0..1` in both axes), not screen pixels, and
+they are re-resolved on every tick. Rotation, a resolution change or a taller status bar therefore
+moves the target with the screen instead of leaving it stranded outside. They are also *fixed screen
+coordinates*: the point does not follow a page's scroll, which is why the picker says so in words.
+
 **B. Pick on screen (precision).** `Pick on screen` opens a full-screen activity where the nine zones
 cover the **real** display edge to edge:
 
@@ -87,11 +99,16 @@ cover the **real** display edge to edge:
 |---|---|
 | Zones | The real usable area, `2 dp` inset, nine thirds, light scrim `#99101618` over the app beneath so the target app stays readable |
 | Labels | `headlineSmall` numbers; the selected zone keeps its number *under* the crosshair so it is never a blank block |
-| Hint bar | Top-centre, `RoundedCornerShape(16.dp)`, `#F2101A1C`. Line 1 `Tap the third of the screen to press`, line 2 `Currently Row 2, column 2 (center) · zones match the real screen`, plus a `Cancel` text button. Only `Cancel` takes pointer input, so the bar itself does not eat a zone |
-| Selection | Tapping a zone writes the cell index and closes the activity immediately |
+| Hint bar | Top-centre, `RoundedCornerShape(16.dp)`, `#F2101A1C`. Line 1 `Tap the third of the screen to press`, line 2 `Currently Row 2, column 2 (center) · zones match the real screen`, a `Cancel` text button, and below them the mode chips `Cell` / `Exact` |
+| Selection (Cell) | Tapping a zone writes the cell index and closes the activity immediately |
+| Exact mode | The third lines stay as faint guides, a crosshair follows the finger, and releasing commits the touch point as a fraction of the same usable area. Hint text switches to `Tap the exact spot to press` / `A fixed screen position · it does not follow page scrolling` |
+| Mode switch | Explicit, and it opens on whatever mode is live. No snapping: "near a centre means the cell" would silently rewrite a deliberate pixel the user could neither see nor undo |
 | Why top | A bottom bar would cover cells 7–9 and swallow the taps it is asking for |
 
-Only the **cell index** is stored from this screen — never a pixel coordinate.
+Cell mode stores only the **cell index**; exact mode stores a **fraction**, never a raw pixel — so
+both survive rotation. The committed touch is mapped with the window's own location on screen, so a
+ROM that insets the window instead of drawing behind its bars cannot shift the target by the height
+of the status bar.
 
 ---
 
@@ -187,7 +204,7 @@ they are tapping.
 | Header | `Settings` (titleSmall, semibold) on the left; `Open` and `Done` pills on the right, 6 dp apart |
 | `Open` | Outlined pill (`1 dp outlineVariant`, `onSurface` label): collapses the panel, then launches the full app |
 | `Done` | Filled `primaryContainer` pill: returns to the controls page |
-| Target cell | `Target cell` label + a nine-grid filling the panel width, **150 dp** tall |
+| Target | A nine-grid filling the panel width, **150 dp** tall. In exact mode it carries the same pin at the same fraction and no cell is highlighted; tapping any cell switches back to coarse aiming |
 | Interval | `Every` label, `−` / `+` 38 dp step buttons around a 46 dp read-out (`3s`), clamped at 1 s and 3600 s (disabled, not hidden) |
 | Summary | **none** — the grid shows the cell, the stepper shows the seconds; a `Row 3, column 2 · 5s` echo was the third copy of the same two facts |
 
@@ -219,7 +236,7 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | 2 | **Status** | State dot + one of `Tapping` / `Paused` / `Finished` / `Needs attention` / `Idle`; right side `Every 3s`; **no detail paragraph** — the word and the button already say everything, and a failure sentence appears only on error; the primary **Start tapping / Stop tapping** button (52 dp, full width) |
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
-| 5 | **Target cell** | 132 dp nine-grid + cell name + `Pick on screen` |
+| 5 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Pick on screen`; in exact mode a pin instead of a highlight, `Exact spot` + `52% · 38%`, `Pick another spot`, `Back to grid centres` |
 | 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 100 / 500 / 1000` and one explanatory line |
 | 7 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |
 | 8 | **Before you start** *(when complete)* | The same card, now collapsed to `All set`, at the bottom of the page |
@@ -445,7 +462,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 - `Optional` · `Display over other apps` · `Accessibility: AutoClick taps` · `Notifications` · `Battery: unrestricted`
 - `Shows the floating hand.` · `Sends the taps.` · `Status line with a Stop button.` · `Keeps the service alive.`
 - `Greyed out? App info › Allow restricted settings.`
-- `Target cell` · `Where the tap lands: the screen is split into nine cells.` · `Pick on screen`
+- `Where to tap` · `One cell of a 3x3 grid; the tap lands in its centre.` / `One fixed spot on the screen.` · `Pick on screen` · `Pick another spot` · `Back to grid centres` · `Exact spot` · `52% · 38%`
 - `Interval` · `Seconds to wait between two taps.` · `Seconds` · `Apply` · `1–3600 s` · `1s 2s 5s 10s 30s 60s`
 - `Stop after` · `Never` · `100` · `500` · `1000` · `Runs until you stop it.` · `Stops by itself after 500 taps.`
 - `Advanced` · `Feedback while it runs. Both on by default.` · `All on` / `Some off`
@@ -462,6 +479,10 @@ All user-facing strings, in one place, so new copy does not drift in tone.
   `Open the app`, `Close settings`, `Decrease interval`, `Increase interval`
 
 **Picker**
+
+- `Tap the third of the screen to press` · `Tap the exact spot to press`
+- `Currently Row 2, column 2 (center) · zones match the real screen` · `A fixed screen position · it does not follow page scrolling`
+- `Cell` · `Exact` · `Exact · 52% · 38%` · `Cancel`
 
 - `Tap the third of the screen to press`
 - `Currently Row 1, column 1 · zones match the real screen`

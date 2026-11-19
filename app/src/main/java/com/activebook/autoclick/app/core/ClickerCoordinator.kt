@@ -1,10 +1,10 @@
 package com.activebook.autoclick.app.core
 
-import com.activebook.autoclick.app.domain.geometry.GridGeometry
 import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState
 import com.activebook.autoclick.app.domain.model.FailureReason
+import com.activebook.autoclick.app.domain.model.TapTarget
 import com.activebook.autoclick.app.domain.model.TapOutcome
 import com.activebook.autoclick.app.domain.model.TapResult
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,7 +52,11 @@ class ClickerCoordinator(
 
     private var ticker: Ticker? = null
     private var generation = 0L
-    private var sessionCellIndex = ClickerConfig.DEFAULT_CELL_INDEX
+    /**
+     * Frozen at Start, re-resolved against the live screen area on every tick. Cells and exact
+     * points therefore travel through the identical resolver, guard checks included.
+     */
+    private var sessionTarget: TapTarget = TapTarget.CenterCell
     private var sessionIntervalMs = ClickerConfig.DEFAULT_INTERVAL_MS
     private var sessionBudget = ClickerConfig.DEFAULT_STOP_AFTER_TAPS
     private var startedAtUptime = 0L
@@ -95,7 +99,7 @@ class ClickerCoordinator(
                 return
             }
 
-            val target = GridGeometry.cellCenter(config.cellIndex, area)
+            val target = config.target.resolveIn(area)
             val overlay = guard
             if (overlay != null && overlay.overlaps(target)) {
                 failLocked(FailureReason.TARGET_COVERED_BY_BUBBLE)
@@ -104,7 +108,7 @@ class ClickerCoordinator(
 
             generation += 1
             val sessionGeneration = generation
-            sessionCellIndex = config.cellIndex
+            sessionTarget = config.target
             sessionIntervalMs = config.intervalMs
             sessionBudget = config.stopAfterTaps
             startedAtUptime = clock()
@@ -176,14 +180,15 @@ class ClickerCoordinator(
 
     /**
      * Applies new settings to a live session. Changing the interval rebuilds the ticker (which
-     * re-anchors, so the new period takes effect on the next tick); changing the cell is picked
-     * up by the next tick automatically. Counters are preserved.
+     * re-anchors, so the new period takes effect on the next tick); changing the target — a cell
+     * or an exact point — is picked up by the next tick automatically. Counters are preserved.
      */
     fun applyConfig(config: ClickerConfig) {
         synchronized(lock) {
+            val newTarget = config.target
             if (ticker == null) {
                 // Not running (or paused): the next start() uses the latest config anyway.
-                sessionCellIndex = config.cellIndex
+                sessionTarget = newTarget
                 sessionIntervalMs = config.intervalMs
                 sessionBudget = config.stopAfterTaps
                 return
@@ -195,11 +200,14 @@ class ClickerCoordinator(
                 finishLocked()
                 return
             }
-            if (config.cellIndex == sessionCellIndex && config.intervalMs == sessionIntervalMs) {
+
+            // Retargeting needs no new ticker: the next tick resolves the new target itself,
+            // whether it moved a cell or moved to an exact pixel. Only the interval re-anchors.
+            sessionTarget = newTarget
+            if (config.intervalMs == sessionIntervalMs) {
                 return
             }
 
-            sessionCellIndex = config.cellIndex
             sessionIntervalMs = config.intervalMs
 
             val previousTicker = ticker
@@ -263,7 +271,7 @@ class ClickerCoordinator(
                 return
             }
 
-            val point = GridGeometry.cellCenter(sessionCellIndex, area)
+            val point = sessionTarget.resolveIn(area)
             val overlay = guard
             if (overlay != null && overlay.overlaps(point)) {
                 skippedTicks.incrementAndGet()

@@ -370,9 +370,13 @@ private fun SettingsPanel(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // An exact point is drawn as a pin rather than snapped to the nearest cell: the grid
+            // here is the only thing that can change the target mid-run, and tapping a cell is
+            // the documented way back to coarse aiming.
             NineGrid(
                 selectedIndex = config.cellIndex,
                 onSelect = onSelectCell,
+                pointMarker = if (config.isExactPoint) config.point else null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(150.dp),

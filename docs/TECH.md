@@ -262,11 +262,13 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
 
 ## 7. Persistence
 
-`ClickerConfigRepository` over DataStore Preferences — seven keys, all scalar:
+`ClickerConfigRepository` over DataStore Preferences — ten keys, all scalar:
 
 | Key | Type | Default |
 |---|---|---|
 | `cell_index` | Int | `4` (center) |
+| `target_mode` | String (`CELL` / `POINT`) | `CELL` |
+| `target_x` / `target_y` | Float `0..1` | `0.5` |
 | `interval_ms` | Long | `1000` |
 | `stop_after_taps` | Int | `0` (no budget) |
 | `haptic_on_tap` | Boolean | `true` |
@@ -274,9 +276,12 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
 | `bubble_x` / `bubble_y` | Int | last drag position |
 
 Every read funnels through `ClickerConfig.of(...)`, which clamps cell into `0..8`, interval into
-`1..3600 s` and the tap budget into `0..100 000` — a corrupted or hand-edited preference file cannot
-produce a zero interval or a negative budget. **No pixel
-coordinate is ever stored.** Two processes never write concurrently: the service writes bubble
+`1..3600 s`, the tap budget into `0..100 000` and the exact point into `0..1` on both axes — a
+corrupted or hand-edited preference file cannot produce a zero interval, a negative budget or a
+target outside the screen. An unknown `target_mode` string falls back to `CELL`, so a store written
+by 1.3.0 (three missing keys) behaves exactly as it did before. **No pixel coordinate is stored**:
+a point is a *fraction* of the usable area, resolved into pixels on every tick. That is what makes
+it survive rotation, a resolution change and a taller status bar. Two processes never write concurrently: the service writes bubble
 position, the activity writes config, both through the same repository instance.
 
 ---
@@ -348,7 +353,7 @@ the whole hand-off.
 ## 9. Build, versioning, artifacts
 
 ```bash
-./gradlew :app:testDebugUnitTest   # 43 tests
+./gradlew :app:testDebugUnitTest   # 60 tests
 ./gradlew :app:lintDebug           # 0 errors
 ./gradlew :app:assembleDebug       # debug APK  (+ refresh dist/AutoClick-<version>-debug.apk)
 ./gradlew :app:assembleRelease     # R8 release  (+ refresh dist/AutoClick-<version>.apk)
@@ -376,7 +381,7 @@ the whole hand-off.
 
 | Gate | Result |
 |---|---|
-| `:app:testDebugUnitTest` | **43 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest` |
+| `:app:testDebugUnitTest` | **60 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest` |
 | `:app:lintDebug` | **0 errors**; 18 warnings, all "newer version available" hints |
 
 What the unit tests actually pin: nine cells tile exactly and centres sit at 1/6, 3/6, 5/6; insets
@@ -425,7 +430,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 001 | Taps via `AccessibilityService.dispatchGesture`, never root/adb/reflection | Accepted |
 | 002 | One FGS + one AccessibilityService + process-singleton coordinator; single process | Accepted |
 | 003 | Compose for app *and* overlay, hosted by `ComposeView` + `OverlayLifecycleOwner` | Accepted |
-| 004 | DataStore Preferences for seven scalar keys | Accepted |
+| 004 | DataStore Preferences for scalar keys (seven in 1.3.0, ten in 1.4.0) | Accepted |
 | 019 | Tap budget counted in delivered taps, surfaced as its own `Finished` state | Accepted — `Idle` would make a completed run look like a never-started one |
 | 005 | Store a cell index, resolve pixels at fire time from current metrics | Accepted |
 | 006 | Anchored `HandlerThread` scheduling, rebase on over-long stalls, no `AlarmManager` | Accepted |
@@ -463,7 +468,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 ```
 auto-click/
 ├─ app/src/main/java/com/activebook/autoclick/app/   domain / core / data / platform / service / ui
-├─ app/src/test/java/...                             4 test classes, 43 JVM tests
+├─ app/src/test/java/...                             6 test classes, 60 JVM tests
 ├─ app/src/main/res/                                 strings (English), themes, icons, XML configs
 ├─ dist/                                             AutoClick-1.2.0.apk and -debug.apk (copies)
 ├─ docs/DESIGN.md                                    product + interaction design

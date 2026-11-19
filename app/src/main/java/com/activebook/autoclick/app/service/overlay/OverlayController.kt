@@ -26,6 +26,7 @@ import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.geometry.ScreenRect
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState
+import com.activebook.autoclick.app.domain.model.TargetMode
 import com.activebook.autoclick.app.ui.overlay.PanelMode
 import com.activebook.autoclick.app.ui.theme.AutoClickTheme
 import com.activebook.autoclick.app.ui.failureMessage
@@ -372,7 +373,11 @@ class OverlayController(
                         collapsePanel()
                         onOpenApp()
                     },
-                    onSelectCell = { index -> updateConfig { it.copy(cellIndex = index) } },
+                    // Any cell tap switches back to coarse aiming, so the pin never lingers
+                    // after the user has clearly chosen a cell.
+                    onSelectCell = { index ->
+                        updateConfig { it.copy(cellIndex = index, targetMode = TargetMode.CELL) }
+                    },
                     onIntervalChange = { deltaSeconds ->
                         updateConfig { config ->
                             ClickerConfig.ofSeconds(
@@ -385,6 +390,10 @@ class OverlayController(
                                 stopAfterTaps = config.stopAfterTaps,
                                 hapticOnTap = config.hapticOnTap,
                                 flashOnTap = config.flashOnTap,
+                                // The panel only edits the interval here; dropping the mode would
+                                // silently reset an exact target back to the cell centre.
+                                targetMode = config.targetMode,
+                                point = config.point,
                             )
                         }
                     },

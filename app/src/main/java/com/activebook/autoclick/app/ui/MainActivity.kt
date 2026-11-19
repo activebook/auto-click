@@ -28,7 +28,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.activebook.autoclick.app.AppContainer
 import com.activebook.autoclick.app.AutoClickApplication
+import com.activebook.autoclick.app.domain.geometry.RelativePoint
 import com.activebook.autoclick.app.domain.model.ClickerConfig
+import com.activebook.autoclick.app.domain.model.TargetMode
 import com.activebook.autoclick.app.domain.model.ClickerState
 import com.activebook.autoclick.app.domain.model.FailureReason
 import com.activebook.autoclick.app.platform.Permissions
@@ -114,7 +116,11 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onStop = { container.coordinator.stop() },
-                    onCellSelected = { index -> applyConfig(cell = index) },
+                    // Tapping any cell is an explicit "go back to coarse": the mode changes with
+                    // the gesture, so the pin disappears the moment a cell is chosen.
+                    onCellSelected = { index ->
+                        applyConfig(cell = index, targetMode = TargetMode.CELL)
+                    },
                     onIntervalSeconds = { seconds -> applyConfig(seconds = seconds) },
                     onStopAfterTaps = { taps -> applyConfig(stopAfterTaps = taps) },
                     onHaptics = { enabled -> applyConfig(haptic = enabled) },
@@ -152,6 +158,7 @@ class MainActivity : ComponentActivity() {
                     onPickOnScreen = {
                         startActivity(Intent(this@MainActivity, GridPickerActivity::class.java))
                     },
+                    onUseGridTarget = { applyConfig(targetMode = TargetMode.CELL) },
                 )
             }
         }
@@ -163,6 +170,8 @@ class MainActivity : ComponentActivity() {
         stopAfterTaps: Int? = null,
         haptic: Boolean? = null,
         flash: Boolean? = null,
+        targetMode: TargetMode? = null,
+        point: RelativePoint? = null,
     ) {
         val current = container.config.value
         val next = ClickerConfig.ofSeconds(
@@ -171,6 +180,10 @@ class MainActivity : ComponentActivity() {
             stopAfterTaps = stopAfterTaps ?: current.stopAfterTaps,
             hapticOnTap = haptic ?: current.hapticOnTap,
             flashOnTap = flash ?: current.flashOnTap,
+            // Every write carries the mode and point forward, so changing the interval can never
+            // silently drop an exact target back to a cell.
+            targetMode = targetMode ?: current.targetMode,
+            point = point ?: current.point,
         )
         lifecycleScope.launch { container.repository.updateConfig(next) }
     }

@@ -6,7 +6,7 @@
 
 **Taps one spot on your screen, over and over, on a timer you set.**
 
-- The screen is a 3×3 grid. Pick a cell.
+- The screen is a 3×3 grid. Pick a cell — or pick any exact spot.
 - Pick the seconds: 1 to 3600, default 1.
 - A floating hand starts, stops and retimes it from inside any app.
 

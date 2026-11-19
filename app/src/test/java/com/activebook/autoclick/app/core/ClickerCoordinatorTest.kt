@@ -1,10 +1,12 @@
 package com.activebook.autoclick.app.core
 
+import com.activebook.autoclick.app.domain.geometry.RelativePoint
 import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.geometry.ScreenRect
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState
 import com.activebook.autoclick.app.domain.model.FailureReason
+import com.activebook.autoclick.app.domain.model.TargetMode
 import com.activebook.autoclick.app.domain.model.TapOutcome
 import com.activebook.autoclick.app.domain.model.TapResult
 import org.junit.Assert.assertEquals
@@ -113,6 +115,94 @@ class ClickerCoordinatorTest {
         harness.sink.deliverLatest()
         assertEquals(1L, (harness.state as ClickerState.Running).tapCount)
         assertEquals(TapOutcome.DELIVERED, (harness.state as ClickerState.Running).lastOutcome)
+    }
+
+    @Test
+    fun `an exact point taps that pixel, not the centre of the cell it falls in`() {
+        // 0.2 / 0.8 in a 1080x1920 area is (216, 1536) — nowhere near the middle cell's (540, 960).
+        val exact = ClickerConfig.ofSeconds(
+            cellIndex = 4,
+            intervalSeconds = 1,
+            stopAfterTaps = 0,
+            hapticOnTap = true,
+            flashOnTap = true,
+            targetMode = TargetMode.POINT,
+            point = RelativePoint.of(0.2f, 0.8f),
+        )
+        val harness = Harness(exact)
+        harness.coordinator.start()
+        harness.tickers.single().fire()
+
+        assertEquals(216f, harness.sink.taps[0].first, 0.01f)
+        assertEquals(1536f, harness.sink.taps[0].second, 0.01f)
+    }
+
+    @Test
+    fun `an exact point follows the usable area when the bars move`() {
+        val exact = ClickerConfig.ofSeconds(
+            cellIndex = 4,
+            intervalSeconds = 1,
+            stopAfterTaps = 0,
+            hapticOnTap = true,
+            flashOnTap = true,
+            targetMode = TargetMode.POINT,
+            point = RelativePoint.of(0.5f, 0.5f),
+        )
+        val harness = Harness(exact)
+        harness.coordinator.start()
+        // Same fraction, smaller area: the tap must move with the area instead of staying put.
+        harness.area = ScreenRect(0f, 200f, 1080f, 1720f)
+        harness.tickers.single().fire()
+
+        assertEquals(540f, harness.sink.taps[0].first, 0.01f)
+        assertEquals(200f + 760f, harness.sink.taps[0].second, 0.01f)
+    }
+
+    @Test
+    fun `retargeting to an exact point mid-run needs no restart and applies on the next tick`() {
+        val harness = Harness()
+        harness.coordinator.start()
+        val firstTicker = harness.tickers.single()
+        firstTicker.fire()
+        harness.sink.deliverLatest()
+
+        harness.config = ClickerConfig.ofSeconds(
+            cellIndex = 4,
+            intervalSeconds = 1,
+            stopAfterTaps = 0,
+            hapticOnTap = true,
+            flashOnTap = true,
+            targetMode = TargetMode.POINT,
+            point = RelativePoint.of(0.9f, 0.1f),
+        )
+        harness.coordinator.applyConfig(harness.config)
+        firstTicker.fire()
+
+        // No second ticker: a target change must not re-anchor the schedule.
+        assertEquals(1, harness.tickers.size)
+        assertEquals(1080f * 0.9f, harness.sink.taps[1].first, 0.01f)
+        assertEquals(1920f * 0.1f, harness.sink.taps[1].second, 0.01f)
+    }
+
+    @Test
+    fun `a bubble over an exact point refuses the start for the same reason a cell does`() {
+        val exact = ClickerConfig.ofSeconds(
+            cellIndex = 4,
+            intervalSeconds = 1,
+            stopAfterTaps = 0,
+            hapticOnTap = true,
+            flashOnTap = true,
+            targetMode = TargetMode.POINT,
+            point = RelativePoint.of(0.3f, 0.3f),
+        )
+        val harness = Harness(exact)
+        harness.overlap = true
+        harness.coordinator.start()
+
+        val state = harness.state
+        assertTrue(state is ClickerState.Error)
+        assertEquals(FailureReason.TARGET_COVERED_BY_BUBBLE, (state as ClickerState.Error).reason)
+        assertTrue(harness.sink.taps.isEmpty())
     }
 
     @Test

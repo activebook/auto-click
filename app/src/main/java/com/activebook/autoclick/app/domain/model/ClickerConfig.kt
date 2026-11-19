@@ -1,6 +1,7 @@
 package com.activebook.autoclick.app.domain.model
 
 import com.activebook.autoclick.app.domain.geometry.GridGeometry
+import com.activebook.autoclick.app.domain.geometry.RelativePoint
 
 /**
  * Everything the user can configure. Immutable snapshot: a running session keeps its own copy,
@@ -17,10 +18,19 @@ data class ClickerConfig(
     val stopAfterTaps: Int,
     val hapticOnTap: Boolean,
     val flashOnTap: Boolean,
+    /** Cell centre (coarse) or exact point (precise). Defaults to the behaviour 1.3.0 shipped. */
+    val targetMode: TargetMode = TargetMode.CELL,
+    /** Only meaningful when [targetMode] is POINT. Stored as a fraction so it survives rotation. */
+    val point: RelativePoint = RelativePoint.Center,
 ) {
     val intervalSeconds: Int get() = (intervalMs / MS_PER_SECOND).toInt()
 
     val isCenterCell: Boolean get() = cellIndex == GridGeometry.CENTER_CELL_INDEX
+
+    val isExactPoint: Boolean get() = targetMode == TargetMode.POINT
+
+    /** The target this config describes, in the form the engine resolves per tick. */
+    val target: TapTarget get() = TapTarget(targetMode, cellIndex, point)
 
     companion object {
         const val MS_PER_SECOND = 1000L
@@ -46,6 +56,8 @@ data class ClickerConfig(
             stopAfterTaps = DEFAULT_STOP_AFTER_TAPS,
             hapticOnTap = true,
             flashOnTap = true,
+            targetMode = TargetMode.CELL,
+            point = RelativePoint.Center,
         )
 
         /** Clamps every field, so no caller can create a config the engine cannot honour. */
@@ -55,12 +67,18 @@ data class ClickerConfig(
             stopAfterTaps: Int,
             hapticOnTap: Boolean,
             flashOnTap: Boolean,
+            targetMode: TargetMode = TargetMode.CELL,
+            point: RelativePoint = RelativePoint.Center,
         ): ClickerConfig = ClickerConfig(
             cellIndex = cellIndex.coerceIn(0, GridGeometry.CELL_COUNT - 1),
             intervalMs = intervalMs.coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS),
             stopAfterTaps = stopAfterTaps.coerceIn(NO_TAP_BUDGET, MAX_STOP_AFTER_TAPS),
             hapticOnTap = hapticOnTap,
             flashOnTap = flashOnTap,
+            targetMode = targetMode,
+            // Clamped in RelativePoint's factory, so a stale or hand-written fraction cannot aim
+            // at a pixel outside the screen.
+            point = RelativePoint.of(point.x, point.y),
         )
 
         fun ofSeconds(
@@ -69,12 +87,16 @@ data class ClickerConfig(
             stopAfterTaps: Int,
             hapticOnTap: Boolean,
             flashOnTap: Boolean,
+            targetMode: TargetMode = TargetMode.CELL,
+            point: RelativePoint = RelativePoint.Center,
         ): ClickerConfig = of(
             cellIndex = cellIndex,
             intervalMs = intervalSeconds.toLong() * MS_PER_SECOND,
             stopAfterTaps = stopAfterTaps,
             hapticOnTap = hapticOnTap,
             flashOnTap = flashOnTap,
+            targetMode = targetMode,
+            point = point,
         )
     }
 }
