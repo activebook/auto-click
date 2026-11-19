@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -132,7 +133,7 @@ class OverlayController(
     private val errorLineState = mutableStateOf<String?>(null)
 
     /** Increments on every delivered tap; the bubble's countdown ring restarts on each change. */
-    private val tapCountState = mutableStateOf(0L)
+    private val tapCountState = mutableLongStateOf(0L)
 
     val isShowing: Boolean get() = bubbleView != null
 
@@ -199,7 +200,7 @@ class OverlayController(
                     paused = pausedState.value,
                     finished = finishedState.value,
                     intervalMs = configState.value.intervalMs,
-                    tapCount = tapCountState.value,
+                    tapCount = tapCountState.longValue,
                     onDragStart = { x, y ->
                         dragDownScreenX = x
                         dragDownScreenY = y
@@ -582,7 +583,7 @@ class OverlayController(
                 // Drive the countdown ring off the same delivered-tap signal as the crosshair
                 // flash, so the ring resets exactly when a tap lands — independent of whether
                 // the flash itself is switched on.
-                tapCountState.value += 1
+                tapCountState.longValue += 1
                 flashTap(point)
             }
         }

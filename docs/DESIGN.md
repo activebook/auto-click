@@ -174,6 +174,22 @@ for one outcome would eventually disagree (this was tried and removed — see PL
 That last row is the difference between an auto-tapper that looks broken and one that behaves:
 injecting a touch into a touchable overlay would consume it silently.
 
+### 4.4 The countdown ring
+
+A circular progress ring around the hand turns the abstract interval into something the user can
+*watch*. It is a live-run cue, not a dial.
+
+| Property | Spec | Reason |
+|---|---|---|
+| Geometry | 3 dp stroke at the disc perimeter, round caps, clockwise from the top (−90°) | Sits on the edge so it never overlaps the centred hand + label; no window resize needed |
+| Track | Full circle in `onPrimary` at α 0.22 | Shows the whole path even at progress 0 |
+| Arc | `onPrimary`, sweep `360° × progress` | Contrasts the `primary` fill in both light and dark themes |
+| Timing | Fills 0 → 1 linearly over **one interval**, snaps to 0 on each delivered tap | The engine taps exactly one interval after the previous tap, so the ring completes right as the tap lands, then restarts — a countdown per cycle |
+| Signal | Driven by the engine's `tapEvents` (a counter), **not** a separate timer | A second timer would drift out of step with the real taps; sharing the delivered-tap signal keeps them locked |
+| Idle / paused / finished | **hidden** | Outside a live run the hand looks exactly as it did before; `PAUSED`/`OFF`/`DONE` carry the state |
+| Interval change mid-run | Re-times immediately | The ring period and the ticker re-anchor together |
+| Relation to `Flash marker` | Independent | The ring shows *time to next tap*; the flash shows *where the last tap landed*. Different jobs, different toggles |
+
 ---
 
 ## 5. The panel
@@ -361,6 +377,7 @@ Two details worth keeping in the UI:
 | Surface | Text |
 |---|---|
 | Hand label | `ON` / `OFF` / `PAUSED` |
+| Hand countdown ring | A circular arc fills over one interval and resets on each tap (§4.4); hidden when idle, paused or finished |
 | Panel status | **none** while idle, running or finished — the play/stop glyph carries the state; the failure sentence appears only on error |
 | App status detail | Same counters; `Waiting for the screen to unlock (n taps so far)` while paused |
 | Notification title | `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — stopped` |
