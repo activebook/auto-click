@@ -190,17 +190,22 @@ com.activebook.autoclick.app/com.activebook.autoclick.app.service.accessibility.
 
 ## 5. Overlay windows
 
-Three windows, never more. Every `WindowManager` call happens on the main thread.
+Three persistent windows, plus two transient ones while the hide popover is open. Every
+`WindowManager` call happens on the main thread.
 
 | Window | Size | Type | Flags | Notes |
 |---|---|---|---|---|
-| Hand | 56 dp × 56 dp | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `NOT_TOUCH_MODAL`, `LAYOUT_IN_SCREEN`, `HARDWARE_ACCELERATED` | `NOT_FOCUSABLE` is mandatory: otherwise it steals the IME and the back key |
-| Panel | 212 dp × `WRAP_CONTENT` | `TYPE_APPLICATION_OVERLAY` | same four | Created only while expanded; `WRAP_CONTENT` height means any layout change moves the anchor |
+| Hand | 40 dp × 40 dp | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `NOT_TOUCH_MODAL`, `LAYOUT_IN_SCREEN`, `HARDWARE_ACCELERATED` | `NOT_FOCUSABLE` is mandatory: otherwise it steals the IME and the back key |
+| Panel | 200 dp × `WRAP_CONTENT` | `TYPE_APPLICATION_OVERLAY` | same four | Created only while expanded; `WRAP_CONTENT` height means any layout change moves the anchor |
 | Crosshair | 30 dp × 30 dp | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `NOT_TOUCHABLE`, `LAYOUT_IN_SCREEN` | `NOT_TOUCHABLE` is what keeps a decorative marker from eating taps |
+| Hide popover (1.6.3) | 44 dp × 44 dp | `TYPE_APPLICATION_OVERLAY` | same four as panel | Only while long-press menu open; the single eye-off button |
+| Hide scrim (1.6.3) | `MATCH_PARENT` | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `LAYOUT_IN_SCREEN` (touchable) | Only while the popover is open; catches "tap anywhere else" to dismiss. While open the guard skips every tick so no tap lands in it |
 
-All are `PixelFormat.TRANSLUCENT`, `gravity = TOP|START`, and clamped into the usable area
-(`edgeMarginPx = 12 dp`). No `FLAG_DIM_BEHIND` and no `FLAG_WATCH_OUTSIDE_TOUCH` — the panel closes
-from its own chevron, and a dim scrim was explicitly rejected by the product owner.
+All are `PixelFormat.TRANSLUCENT`, `gravity = TOP|START`. Horizontal placement/clamping uses
+`DisplayProvider.overlayArea()` (full display width, vertical system-bar insets kept) with
+`edgeMarginPx = 4 dp`, so the hand hugs the physical edge; tap targeting still uses the inset-aware
+`usableArea()`. No `FLAG_DIM_BEHIND` and no `FLAG_WATCH_OUTSIDE_TOUCH` — the panel closes from its
+own close (X) button, and a dim scrim was explicitly rejected by the product owner.
 
 The hand also carries a **countdown ring** (1.6.0): a Compose `Canvas` arc at the disc perimeter,
 animated 0 → 1 over one interval by an `Animatable`. It is reset by a `mutableLongStateOf` tap
@@ -375,7 +380,7 @@ the whole hand-off.
 ./gradlew :app:assembleRelease     # R8 release  (+ refresh dist/AutoClick-<version>.apk)
 ```
 
-- `versionCode = 3`, `versionName = "1.2.0"`. A name bump without a code bump is refused by the
+- `versionCode = 12`, `versionName = "1.6.5"`. A name bump without a code bump is refused by the
   project's own invariant.
 - Gradle's artifact keeps AGP's canonical name `app-<variant>.apk` because Studio's Run,
   `installDebug` and most CI scripts resolve exactly that path; renaming inside `build/` is only
@@ -467,7 +472,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 021 | Hand visibility = overlay permission AND persisted `hand_visible`; hiding stops the run (no headless); Start re-shows; re-show lives in the settings page | Accepted — a tap loop the user cannot see or stop would be a trap |
 | 022 | Hide entry is a long-press popover (eye-off card + full-screen scrim), not a panel row; while open the guard skips all ticks | Accepted — one gesture instead of three taps; the scrim must not swallow dispatched taps |
 | 023 | Floating hand / panel / hide popover share one fixed dark-teal "pod" palette + a scoped `LocalColorScheme`; hand shrunk 56→44 dp | **Superseded by 024** — the fixed dark pod broke consistency with the app's white/green theme |
-| 024 | Hand + panel follow the app theme (white/green, theme-aware); only the hide popover stays dark; hand shrunk to 36 dp | Accepted — floating controls must read as part of the app, not a foreign dark plate; the dark eye is a deliberate "put it away" exception |
+| 024 | Hand + panel follow the app theme (white/green, theme-aware); only the hide popover stays dark; hand settled at 40 dp with a 28 dp glyph | Accepted — floating controls must read as part of the app, not a foreign dark plate; the dark eye is a deliberate "put it away" exception |
 
 ---
 

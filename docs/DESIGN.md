@@ -464,7 +464,7 @@ Fixed accents outside the scheme: `#C2410C` (enable-permission button), `#B45309
 Material 3 defaults, no custom font. Roles actually used: `headlineSmall` (app title), `titleMedium`
 (card titles, status headline), `titleSmall` (panel settings header, cell name), `bodyMedium`
 (counters, row labels), `bodySmall` (subtitles, hints, footer), `labelMedium` (badges, pills),
-`labelSmall` (panel status, section labels), plus the hand's `9 sp` label.
+`labelSmall` (panel status, section labels), plus the hand's `6 sp` state word.
 
 ### 9.3 Shape, elevation, glass
 
@@ -477,11 +477,12 @@ Material 3 defaults, no custom font. Roles actually used: `headlineSmall` (app t
 | Pills (`Open`, `Done`) | 12 dp | 0 | outlined / `primaryContainer` |
 | Picker hint bar | 16 dp | 0 | `#F2101A1C` on a `#99101618` scrim |
 
-Two rejected looks are recorded so they are not reintroduced: α 0.95 read as solid white ("still
-opaque"), and α 0.78 let the host app's text ghost through the card ("looks like a rendering fault").
-0.90 is the value that reads as glass without ghosting. Real backdrop blur is unavailable on the
-reference ROM (`mBlurEnabled=false`), and a `FLAG_DIM_BEHIND` scrim was removed because the user read
-it as "a shadow on the background".
+Rejected looks are recorded so they are not reintroduced: α 0.78 let the host app's text ghost
+through the card ("looks like a rendering fault"), and a fixed dark "pod" glass (1.6.4) broke
+consistency with the app's white/green theme (reverted in 1.6.5). The floating surfaces now use the
+app `surface` at **α 0.95** — crisp enough to read over busy hosts while still translucent. Real
+backdrop blur is unavailable on the reference ROM (`mBlurEnabled=false`), and a `FLAG_DIM_BEHIND`
+scrim was removed because the user read it as "a shadow on the background".
 
 ### 9.4 The app icon
 

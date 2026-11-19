@@ -9,7 +9,8 @@
 - The screen is a 3×3 grid. Pick a cell — or pick any exact spot.
 - Pick the seconds: 1 to 3600, default 1.
 - Stop after a set number of taps, or run until you stop it.
-- A floating hand starts, stops and retimes it from inside any app, with a countdown ring between taps.
+- A floating hand starts, stops and retimes it from inside any app, with a countdown ring between
+  taps. Long-press the hand to hide it; the app's settings bring it back.
 
 Android 8+ · English · no network permission.
 
