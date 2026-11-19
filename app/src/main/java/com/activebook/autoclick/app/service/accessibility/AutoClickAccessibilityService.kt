@@ -45,8 +45,9 @@ class AutoClickAccessibilityService : AccessibilityService() {
     }
 
     private fun detach() {
-        sink?.disconnect()
+        val current = sink ?: return
         sink = null
-        (application as? AutoClickApplication)?.container?.setClickSink(null)
+        current.disconnect()
+        (application as? AutoClickApplication)?.container?.clearClickSink(current)
     }
 }

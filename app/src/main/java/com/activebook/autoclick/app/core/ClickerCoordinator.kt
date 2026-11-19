@@ -1,5 +1,6 @@
 package com.activebook.autoclick.app.core
 
+import android.util.Log
 import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState
@@ -225,9 +226,18 @@ class ClickerCoordinator(
     /** Called when the accessibility service attaches or detaches. */
     fun onSinkChanged() {
         synchronized(lock) {
-            if (ticker != null && sinkProvider() == null) {
-                failLocked(FailureReason.SERVICE_DISCONNECTED)
+            if (sinkProvider() != null) {
+                // A service that has just attached proves the earlier "disconnected" is over. The
+                // error is deliberately sticky while the sink is gone, but it must not outlive the
+                // condition it describes: a stale banner on top of a working permission is the
+                // worst of both worlds.
+                val current = _state.value
+                if (current is ClickerState.Error && current.reason == FailureReason.SERVICE_DISCONNECTED) {
+                    _state.value = ClickerState.Idle
+                }
+                return
             }
+            if (ticker != null) failLocked(FailureReason.SERVICE_DISCONNECTED)
         }
     }
 

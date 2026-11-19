@@ -2,6 +2,8 @@ package com.activebook.autoclick.app.domain.geometry
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.activebook.autoclick.app.domain.model.TapTarget
+import com.activebook.autoclick.app.domain.model.TargetMode
 
 class RelativePointTest {
 
@@ -34,6 +36,23 @@ class RelativePointTest {
 
         assertEquals(original.x, back.x, 0.5f)
         assertEquals(original.y, back.y, 0.5f)
+    }
+
+    @Test
+    fun `a pick on a real phone resolves back to the same pixel`() {
+        // Measured on the test device: usable area (0,108)-(1080,2408), a tap at (884,2082)
+        // stored itself as 82% / 86%. The engine must inject exactly that pixel again — this is
+        // the whole contract behind "pick the exact spot".
+        val device = ScreenRect(left = 0f, top = 108f, right = 1080f, bottom = 2408f)
+        val picked = ScreenPoint(884f, 2082f)
+
+        val stored = RelativePoint.ofPoint(picked, device)
+        assertEquals(0.82f, stored.x, 0.005f)
+        assertEquals(0.86f, stored.y, 0.005f)
+
+        val injected = TapTarget(TargetMode.POINT, 4, stored).resolveIn(device)
+        assertEquals(picked.x, injected.x, 0.5f)
+        assertEquals(picked.y, injected.y, 0.5f)
     }
 
     @Test

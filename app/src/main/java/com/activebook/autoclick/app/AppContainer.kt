@@ -58,9 +58,19 @@ class AppContainer(context: Context) {
         }
     }
 
-    /** Called by the accessibility service when it connects or disconnects. */
-    fun setClickSink(sink: ClickSink?) {
+    /** Called by the accessibility service when it connects. */
+    fun setClickSink(sink: ClickSink) {
         sinkReference.set(sink)
         coordinator.onSinkChanged()
     }
+
+    /**
+     * Called when a service instance goes away. Compare-and-set on purpose: a service can be
+     * rebound before the previous instance finishes unbinding, and the late `onDestroy` of the old
+     * instance must not withdraw the sink the new one just published.
+     */
+    fun clearClickSink(sink: ClickSink) {
+        if (sinkReference.compareAndSet(sink, null)) coordinator.onSinkChanged()
+    }
+
 }

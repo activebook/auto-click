@@ -387,7 +387,10 @@ Pluralisation is explicit: `1 tap` / `n taps`. No `1 taps`, anywhere.
 | `Flash marker` — "A ring at the point you just tapped." | A 30 dp crosshair ring appears at the exact tap point and fades out | Teal ring `#2DD4BF`, white dot, four teal ticks; fades α 1 → 0 over **260 ms**; never touchable, never focusable |
 
 The marker exists because a tap somewhere else on the screen is otherwise invisible: it is the user's
-proof the loop is landing where they think.
+proof the loop is landing where they think. That proof is only worth something if it is drawn from
+**the same resolution the engine taps from** — `target.resolveIn(usableArea())`, never from the cell
+index. A marker placed at a cell centre while an exact point is being tapped is worse than no marker
+at all: it is a confident, wrong answer.
 
 ---
 

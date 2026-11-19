@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             launchSafely(
-                                Permissions.notificationSettingsIntent(this),
+                                Permissions.notificationSettingsIntent(this@MainActivity),
                                 checked = false,
                             )
                         }
@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
                     onToggleBattery = { enabled ->
                         launchSafely(
                             if (enabled) {
-                                Permissions.batteryOptimizationIntent(this)
+                                Permissions.batteryOptimizationIntent(this@MainActivity)
                             } else {
                                 Permissions.batteryOptimizationListIntent()
                             },

@@ -168,9 +168,18 @@ without touching a `View` off the main thread.
   `StrokeDescription`, one `GestureResultCallback` → `TapResult.DELIVERED / CANCELLED`. It is
   idempotent per call (`AtomicBoolean`), runs on the main looper, and reports `false` when the system
   refuses a second concurrent gesture.
-- Service lifecycle maps to the engine: `onServiceConnected` registers the sink, `onInterrupt` /
-  `onDestroy` disconnect it, and the next tick fails fast with `SERVICE_DISCONNECTED` instead of
+- Service lifecycle maps to the engine: `onServiceConnected` publishes its sink, `onUnbind` /
+  `onDestroy` withdraw it, and the next tick fails fast with `SERVICE_DISCONNECTED` instead of
   spamming exceptions.
+- **A disconnect is a state, not a tombstone.** The system unbinds and rebinds this service on its
+  own schedule — a reinstall, a permission toggle, some ROMs every few seconds. Two invariants keep
+  that survivable: an instance withdraws *only its own* sink (`sinkReference.compareAndSet`), so the
+  late `onDestroy` of an old instance cannot null the sink a newer one just published; and any
+  attach clears a pending `SERVICE_DISCONNECTED` error, because the condition it names is over.
+  Measured on the test device, a rebind cycle used to leave the banner `The accessibility service
+  disconnected. Re-enable it to keep tapping.` on screen for the life of the process while
+  `settings get secure enabled_accessibility_services` still listed the service and no *Enable*
+  button was shown.
 
 Component name (the value used by the deep link):
 

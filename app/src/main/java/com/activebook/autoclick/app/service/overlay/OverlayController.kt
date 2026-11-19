@@ -21,7 +21,6 @@ import com.activebook.autoclick.app.core.ClickerCoordinator
 import com.activebook.autoclick.app.core.DisplayProvider
 import com.activebook.autoclick.app.core.OverlayGuard
 import com.activebook.autoclick.app.data.ClickerConfigRepository
-import com.activebook.autoclick.app.domain.geometry.GridGeometry
 import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.geometry.ScreenRect
 import com.activebook.autoclick.app.domain.model.ClickerConfig
@@ -501,10 +500,10 @@ class OverlayController(
 
     // ---------------------------------------------------------------- crosshair
 
-    private fun ensureCrosshair(cellIndex: Int): CrosshairView? {
+    private fun ensureCrosshair(point: ScreenPoint): CrosshairView? {
         val existing = crosshairView
         if (existing != null) {
-            updateCrosshairPosition(cellIndex)
+            moveCrosshair(point)
             return existing
         }
 
@@ -525,20 +524,13 @@ class OverlayController(
             gravity = Gravity.TOP or Gravity.START
         }
 
-        val center = GridGeometry.cellCenter(cellIndex, area)
-        params.x = (center.x - crosshairSizePx / 2f).toInt()
-        params.y = (center.y - crosshairSizePx / 2f).toInt()
+        params.x = (point.x - crosshairSizePx / 2f).toInt()
+        params.y = (point.y - crosshairSizePx / 2f).toInt()
 
         runCatching { windowManager.addView(view, params) }.onFailure { return null }
         crosshairView = view
         crosshairParams = params
         return view
-    }
-
-    private fun updateCrosshairPosition(cellIndex: Int) {
-        val area = displayProvider.usableArea()
-        if (area.isEmpty) return
-        moveCrosshair(GridGeometry.cellCenter(cellIndex, area))
     }
 
     private fun moveCrosshair(point: ScreenPoint) {
@@ -585,7 +577,11 @@ class OverlayController(
         configState.value = config
 
         if (state is ClickerState.Running) {
-            ensureCrosshair(config.cellIndex)
+            // The marker must show what the engine is aiming at *now*: an exact point is not a
+            // cell centre, and showing the cell's centre would be a lie the user has no way to
+            // disprove — it is their only evidence of where the tap went.
+            val area = displayProvider.usableArea()
+            if (!area.isEmpty) ensureCrosshair(config.target.resolveIn(area))
         } else {
             removeCrosshair()
         }
@@ -595,7 +591,8 @@ class OverlayController(
     private fun flashTap(point: ScreenPoint) {
         val config = configFlow.value
         if (config.flashOnTap) {
-            val view = ensureCrosshair(config.cellIndex)
+            val area = displayProvider.usableArea()
+            val view = if (area.isEmpty) null else ensureCrosshair(config.target.resolveIn(area))
             if (view != null) {
                 moveCrosshair(point)
                 view.animate().cancel()
