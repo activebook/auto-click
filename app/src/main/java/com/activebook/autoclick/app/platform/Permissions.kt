@@ -1,15 +1,16 @@
 package com.activebook.autoclick.app.platform
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.net.toUri
 import com.activebook.autoclick.app.service.accessibility.AutoClickAccessibilityService
 
 /**
@@ -52,7 +53,7 @@ object Permissions {
     fun openOverlaySettings(context: Context): Boolean {
         val targeted = Intent(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:${context.packageName}"),
+            "package:${context.packageName}".toUri(),
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (startSafely(context, targeted)) return true
         return startSafely(
@@ -68,7 +69,7 @@ object Permissions {
     fun batteryOptimizationIntent(context: Context): Intent =
         Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            Uri.parse("package:${context.packageName}"),
+            "package:${context.packageName}".toUri(),
         )
 
     /** The exemption list — the only screen that can take an app back off it. */
@@ -172,7 +173,7 @@ object Permissions {
         true
     } catch (error: SecurityException) {
         false
-    } catch (error: android.content.ActivityNotFoundException) {
+    } catch (error: ActivityNotFoundException) {
         false
     }
 

@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.ComponentCallbacks
 import android.content.Context
-import android.app.ActivityOptions
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
@@ -16,7 +15,6 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.IBinder
 import android.widget.Toast
-
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -70,7 +68,9 @@ class OverlayService : Service() {
             overlay?.onConfigurationChanged()
         }
 
-        @Suppress("DEPRECATION")
+        // ComponentCallbacks still declares onLowMemory() (deprecated in favour of onTrimMemory);
+        // the interface forces an override, so it stays a no-op and the override warning is muted.
+        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
         override fun onLowMemory() = Unit
     }
 

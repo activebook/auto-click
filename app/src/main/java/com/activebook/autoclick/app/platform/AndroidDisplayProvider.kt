@@ -57,6 +57,10 @@ class AndroidDisplayProvider(private val context: Context) : DisplayProvider {
         )
     }
 
+    // status_bar_height / navigation_bar_height are internal framework resources (not in the
+    // public SDK R), so name lookup is the only way to read them on API 26-29. Discouraged for
+    // app resources, but unavoidable here; the modern path above never calls this.
+    @Suppress("DiscouragedApi")
     private fun frameworkDimension(name: String): Int {
         val id = context.resources.getIdentifier(name, "dimen", "android")
         return if (id > 0) context.resources.getDimensionPixelSize(id) else 0

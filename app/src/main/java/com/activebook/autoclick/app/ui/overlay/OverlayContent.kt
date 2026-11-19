@@ -23,7 +23,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.semantics.contentDescription
@@ -37,9 +36,7 @@ import android.view.ViewConfiguration
 import kotlin.math.abs
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.ui.components.CloseGlyph
 import com.activebook.autoclick.app.ui.components.NineGrid

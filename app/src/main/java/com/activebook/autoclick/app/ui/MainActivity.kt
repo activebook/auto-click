@@ -3,8 +3,6 @@ package com.activebook.autoclick.app.ui
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
 import android.os.Bundle
@@ -14,32 +12,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.activebook.autoclick.app.AppContainer
 import com.activebook.autoclick.app.AutoClickApplication
-import com.activebook.autoclick.app.domain.geometry.RelativePoint
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.TargetMode
 import com.activebook.autoclick.app.domain.model.ClickerState
 import com.activebook.autoclick.app.domain.model.FailureReason
 import com.activebook.autoclick.app.platform.Permissions
-import com.activebook.autoclick.app.service.HintTrace
 import com.activebook.autoclick.app.service.OverlayService
 import com.activebook.autoclick.app.ui.grid.GridPickerActivity
 import com.activebook.autoclick.app.ui.theme.AutoClickTheme
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -170,7 +158,6 @@ class MainActivity : ComponentActivity() {
         haptic: Boolean? = null,
         flash: Boolean? = null,
         targetMode: TargetMode? = null,
-        point: RelativePoint? = null,
     ) {
         val current = container.config.value
         val next = ClickerConfig.ofSeconds(
@@ -182,18 +169,11 @@ class MainActivity : ComponentActivity() {
             // Every write carries the mode and point forward, so changing the interval can never
             // silently drop an exact target back to a cell.
             targetMode = targetMode ?: current.targetMode,
-            point = point ?: current.point,
+            point = current.point,
         )
         lifecycleScope.launch { container.repository.updateConfig(next) }
     }
 
-    /**
-     * Opens Accessibility with our row revealed.
-     *
-     * Settings is asked to scroll to and pulse the row. On a ROM that ignores the request the user
-     * still lands on the right page, so it says which row to look for instead of leaving him at the
-     * top of a long list.
-     */
     /**
      * Starts an intent, and if this ROM has no such screen says so instead of dropping the tap.
      */
@@ -272,7 +252,6 @@ class MainActivity : ComponentActivity() {
         // about a scroll they can no longer see would be noise.
         if (SystemClock.elapsedRealtime() > pendingHintDeadline) return
 
-        HintTrace.log(this, "onStop -> toast")
         handoffActive = true
         showTopToast(hint)
         // One Toast lives ~3.5s and Settings' own highlight lands right at the end of that, so a
@@ -280,6 +259,13 @@ class MainActivity : ComponentActivity() {
         handoffHandler.postDelayed({
             if (handoffActive) showTopToast("Click the highlighted row")
         }, HANDOFF_SECOND_LINE_DELAY_MS)
+    }
+
+    override fun onDestroy() {
+        // The second hand-off line is scheduled on a raw Handler, not a lifecycle scope: drop it
+        // so a destroyed activity is never held alive (or toasted through) by a pending message.
+        handoffHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
 }

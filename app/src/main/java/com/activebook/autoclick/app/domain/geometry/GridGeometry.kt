@@ -19,23 +19,6 @@ data class ScreenRect(
 
     fun contains(point: ScreenPoint): Boolean =
         point.x >= left && point.x <= right && point.y >= top && point.y <= bottom
-
-    companion object {
-        /** Builds a rect from size + inset edges, the shape most Android APIs hand us. */
-        fun ofSize(
-            width: Int,
-            height: Int,
-            insetLeft: Int = 0,
-            insetTop: Int = 0,
-            insetRight: Int = 0,
-            insetBottom: Int = 0,
-        ): ScreenRect = ScreenRect(
-            left = insetLeft.toFloat(),
-            top = insetTop.toFloat(),
-            right = (width - insetRight).toFloat(),
-            bottom = (height - insetBottom).toFloat(),
-        )
-    }
 }
 
 /** A point in screen pixels. */
@@ -67,24 +50,6 @@ object GridGeometry {
 
     fun rowOf(cellIndex: Int): Int = cellIndex / COLUMNS
 
-    /**
-     * Bounds of the requested cell inside [area]. Cells tile the area exactly: the nine rects
-     * cover it without gaps or overlap, so a tap can never land in an unassigned region.
-     */
-    fun cellRect(cellIndex: Int, area: ScreenRect): ScreenRect {
-        require(isValidIndex(cellIndex)) { "cellIndex out of range: $cellIndex" }
-        val cellWidth = area.width / COLUMNS
-        val cellHeight = area.height / ROWS
-        val column = columnOf(cellIndex)
-        val row = rowOf(cellIndex)
-        return ScreenRect(
-            left = area.left + column * cellWidth,
-            top = area.top + row * cellHeight,
-            right = area.left + (column + 1) * cellWidth,
-            bottom = area.top + (row + 1) * cellHeight,
-        )
-    }
-
     /** Center point of the requested cell — the exact coordinate AutoClick taps. */
     fun cellCenter(cellIndex: Int, area: ScreenRect): ScreenPoint {
         require(isValidIndex(cellIndex)) { "cellIndex out of range: $cellIndex" }
@@ -96,22 +61,6 @@ object GridGeometry {
             x = area.left + (column + 0.5f) * cellWidth,
             y = area.top + (row + 0.5f) * cellHeight,
         )
-    }
-
-    /**
-     * Which cell a screen point falls into. Used by the on-screen picker, where the user taps
-     * the real screen instead of a preview. Out-of-area taps are clamped to the nearest edge.
-     */
-    fun cellIndexAt(point: ScreenPoint, area: ScreenRect): Int {
-        val column = columnAt(point.x, area.left, area.width)
-        val row = columnAt(point.y, area.top, area.height)
-        return row * COLUMNS + column
-    }
-
-    private fun columnAt(value: Float, start: Float, size: Float): Int {
-        if (size <= 0f) return 0
-        val ratio = (value - start) / size * COLUMNS
-        return ratio.toInt().coerceIn(0, COLUMNS - 1)
     }
 
     /** Human readable name, used in the status line and accessibility hints. */

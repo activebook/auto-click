@@ -10,7 +10,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 
@@ -142,10 +141,4 @@ fun CloseGlyph(color: Color, modifier: Modifier = Modifier) {
             cap = StrokeCap.Round,
         )
     }
-}
-
-/** Crosshair used in the nine-grid preview to mark the chosen cell. */
-fun DrawScope.drawCrosshair(color: Color, radius: Float, stroke: Float) {
-    drawCircle(color, radius, Offset(size.width / 2f, size.height / 2f), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-    drawCircle(color, stroke * 1.1f, Offset(size.width / 2f, size.height / 2f))
 }

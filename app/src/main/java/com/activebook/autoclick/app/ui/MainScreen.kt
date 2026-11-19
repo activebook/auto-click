@@ -31,7 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -649,7 +649,7 @@ private fun IntervalCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         Text(
             text = "Stop after",
@@ -753,7 +753,6 @@ private fun SectionCard(
     }
 }
 
-/** "52%" — two digits are enough to tell two spots apart and never look like a precision claim. */
 @Composable
 private fun TargetPickButton(
     text: String,
@@ -782,4 +781,5 @@ private fun TargetPickButton(
     }
 }
 
+/** "52%" — two digits are enough to tell two spots apart and never look like a precision claim. */
 private fun percentOf(fraction: Float): String = (fraction * 100f).roundToInt().toString() + "%"

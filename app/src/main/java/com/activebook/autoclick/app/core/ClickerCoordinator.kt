@@ -1,6 +1,5 @@
 package com.activebook.autoclick.app.core
 
-import android.util.Log
 import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState

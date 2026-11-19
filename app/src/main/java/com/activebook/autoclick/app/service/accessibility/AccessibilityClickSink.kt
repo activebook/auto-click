@@ -1,6 +1,5 @@
 package com.activebook.autoclick.app.service.accessibility
 
-import android.util.Log
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path

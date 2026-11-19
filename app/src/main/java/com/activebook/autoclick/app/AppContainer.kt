@@ -5,7 +5,6 @@ import android.os.SystemClock
 import com.activebook.autoclick.app.core.ClickSink
 import com.activebook.autoclick.app.core.ClickerCoordinator
 import com.activebook.autoclick.app.core.DisplayProvider
-import com.activebook.autoclick.app.core.Ticker
 import com.activebook.autoclick.app.data.ClickerConfigRepository
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.platform.AndroidDisplayProvider
@@ -72,5 +71,4 @@ class AppContainer(context: Context) {
     fun clearClickSink(sink: ClickSink) {
         if (sinkReference.compareAndSet(sink, null)) coordinator.onSinkChanged()
     }
-
 }

@@ -25,8 +25,6 @@ data class ClickerConfig(
 ) {
     val intervalSeconds: Int get() = (intervalMs / MS_PER_SECOND).toInt()
 
-    val isCenterCell: Boolean get() = cellIndex == GridGeometry.CENTER_CELL_INDEX
-
     val isExactPoint: Boolean get() = targetMode == TargetMode.POINT
 
     /** The target this config describes, in the form the engine resolves per tick. */

@@ -5,13 +5,13 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -99,8 +99,8 @@ class OverlayController(
     private var dragDownScreenX = 0f
     private var dragDownScreenY = 0f
 
-    private val panelModeState = androidx.compose.runtime.mutableStateOf<PanelMode>(PanelMode.CONTROLS)
-    private val configState = androidx.compose.runtime.mutableStateOf<ClickerConfig>(ClickerConfig.Default)
+    private val panelModeState = mutableStateOf<PanelMode>(PanelMode.CONTROLS)
+    private val configState = mutableStateOf<ClickerConfig>(ClickerConfig.Default)
 
     /** Throttles panel relayout during a drag; see [dragBubbleTo]. */
     private var lastPanelRefreshAt = 0L
@@ -259,7 +259,7 @@ class OverlayController(
         // the event stream (measured: a 516 px drag only reached 361 px). Follow the bubble at
         // a lower cadence while the finger is down; the final position is committed on touch up.
         if (panelExpanded) {
-            val now = android.os.SystemClock.uptimeMillis()
+            val now = SystemClock.uptimeMillis()
             if (now - lastPanelRefreshAt >= PANEL_FOLLOW_INTERVAL_MS) {
                 lastPanelRefreshAt = now
                 refreshPanelPlacement()
@@ -358,8 +358,16 @@ class OverlayController(
                             // Get out of the way the moment tapping begins. The check runs one
                             // frame later so a refused start (bubble over the target, missing
                             // permission) keeps the panel open with its explanation visible.
-                            panelView?.postDelayed(
-                                { if (runningState.value) collapsePanel() },
+                            val startedPanel = panelView
+                            startedPanel?.postDelayed(
+                                {
+                                    // Fold only the panel this Start was pressed on. If the user
+                                    // already closed it and opened a fresh one within the grace
+                                    // period, that new panel must stay open.
+                                    if (runningState.value && panelView === startedPanel) {
+                                        collapsePanel()
+                                    }
+                                },
                                 PANEL_AUTOMINIMIZE_DELAY_MS,
                             )
                         }
@@ -587,14 +595,13 @@ class OverlayController(
         }
     }
 
-
     private fun flashTap(point: ScreenPoint) {
         val config = configFlow.value
         if (config.flashOnTap) {
-            val area = displayProvider.usableArea()
-            val view = if (area.isEmpty) null else ensureCrosshair(config.target.resolveIn(area))
+            // [point] is where the tap actually landed, so the marker goes straight there —
+            // ensureCrosshair creates or moves the window and already guards an empty area.
+            val view = ensureCrosshair(point)
             if (view != null) {
-                moveCrosshair(point)
                 view.animate().cancel()
                 view.alpha = 1f
                 view.animate().alpha(0f).setDuration(260L).start()

@@ -37,12 +37,6 @@ class ClickerConfigTest {
     }
 
     @Test
-    fun `center flag follows the index`() {
-        assertTrue(ClickerConfig.Default.isCenterCell)
-        assertFalse(ClickerConfig.of(0, 1000L, 0, true, true).isCenterCell)
-    }
-
-    @Test
     fun `tap budget defaults to none and is clamped`() {
         assertEquals(ClickerConfig.NO_TAP_BUDGET, ClickerConfig.Default.stopAfterTaps)
         assertEquals(ClickerConfig.NO_TAP_BUDGET, ClickerConfig.of(0, 1000L, -5, true, true).stopAfterTaps)
