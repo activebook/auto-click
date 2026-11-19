@@ -12,5 +12,6 @@
     <string name="notification_title_finished">AutoClick — finished</string>
     <string name="notification_action_stop">Stop</string>
     <string name="notification_action_start">Start</string>
+    <string name="notification_action_hide">Hide hand</string>
 
 </resources>

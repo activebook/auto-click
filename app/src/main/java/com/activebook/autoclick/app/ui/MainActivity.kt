@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
             val config by container.config.collectAsStateWithLifecycle()
             val clickerState by container.coordinator.state.collectAsStateWithLifecycle()
             val overlayVisible by OverlayService.isOverlayVisible.collectAsStateWithLifecycle()
+            val handVisible by container.handVisible.collectAsStateWithLifecycle()
 
             val permissions by produceState(
                 initialValue = PermissionSnapshot.current(this@MainActivity),
@@ -79,12 +80,13 @@ class MainActivity : ComponentActivity() {
                 if (fixed) container.coordinator.acknowledgeError()
             }
 
-            // The hand follows the permission and nothing else — its one control is the
-            // "Display over other apps" switch in Before you start (ADR-016). Both directions are
-            // driven from here, and both are idempotent: requestShow attaches the window only if it
-            // is missing, requestHide tears it down and stops the session it can no longer guard.
-            LaunchedEffect(permissions.overlay) {
-                if (permissions.overlay) {
+            // The hand follows the overlay permission AND the user's visibility preference
+            // (ADR-021 amends ADR-016). Both directions are idempotent: requestShow attaches the
+            // window only if missing; requestHide tears it down and stops the session it can no
+            // longer guard. When the user has hidden the hand we leave it hidden until they turn
+            // it back on here (or press Start, which re-shows it).
+            LaunchedEffect(permissions.overlay, handVisible) {
+                if (permissions.overlay && handVisible) {
                     OverlayService.requestShow(this@MainActivity)
                 } else if (OverlayService.isOverlayVisible.value) {
                     OverlayService.requestHide(this@MainActivity)
@@ -113,6 +115,10 @@ class MainActivity : ComponentActivity() {
                     onStopAfterTaps = { taps -> applyConfig(stopAfterTaps = taps) },
                     onHaptics = { enabled -> applyConfig(haptic = enabled) },
                     onFlash = { enabled -> applyConfig(flash = enabled) },
+                    handVisible = handVisible,
+                    onToggleHand = { enabled ->
+                        lifecycleScope.launch { container.repository.setHandVisible(enabled) }
+                    },
                     onOpenAccessibility = ::openAccessibility,
                     onEnableOverlay = ::openOverlay,
                     // A switch cannot grant anything itself, so it opens the screen that owns the

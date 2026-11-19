@@ -86,6 +86,8 @@ fun MainScreen(
     onStopAfterTaps: (Int) -> Unit,
     onHaptics: (Boolean) -> Unit,
     onFlash: (Boolean) -> Unit,
+    handVisible: Boolean,
+    onToggleHand: (Boolean) -> Unit,
     onOpenAccessibility: () -> Unit,
     onEnableOverlay: () -> Unit,
     onToggleOverlay: (Boolean) -> Unit,
@@ -144,6 +146,25 @@ fun MainScreen(
         )
 
         if (!allPermissions) permissionsSection()
+
+        // Always visible (not folded into Advanced) so the hand can be brought back from here
+        // after it was hidden. Hiding stops the run; this switch is the way back (ADR-021).
+        SectionCard(
+            title = "Floating hand",
+            subtitle = null,
+        ) {
+            SwitchRow(
+                label = "Show floating hand",
+                hint = when {
+                    !permissions.overlay -> "Needs \"Display over other apps\" first."
+                    handVisible -> "The hand floats over other apps."
+                    else -> "Hidden. Turn on to bring it back."
+                },
+                checked = handVisible && permissions.overlay,
+                onCheckedChange = onToggleHand,
+                enabled = permissions.overlay,
+            )
+        }
 
         SectionCard(
             title = "Where to tap",
@@ -735,11 +756,12 @@ private fun SwitchRow(
     hint: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) },
+            .clickable(enabled = enabled) { onCheckedChange(!checked) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -751,7 +773,12 @@ private fun SwitchRow(
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = systemSwitchColors())
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            colors = systemSwitchColors(),
+        )
     }
 }
 

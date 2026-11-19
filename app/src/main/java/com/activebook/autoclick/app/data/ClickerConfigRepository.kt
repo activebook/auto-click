@@ -51,6 +51,21 @@ class ClickerConfigRepository(context: Context) {
             if (x != null && y != null && x >= 0 && y >= 0) OverlayPosition(x, y) else null
         }
 
+    /**
+     * Whether the floating hand is allowed on screen. A user preference on top of the overlay
+     * permission (ADR-021): hiding the hand also stops the run, so this is never a silent
+     * "headless" mode. Defaults to shown; an older store without the key behaves as before.
+     */
+    val handVisible: Flow<Boolean> = dataStore.data
+        .catch { throwable ->
+            if (throwable is IOException) emit(emptyPreferences()) else throw throwable
+        }
+        .map { preferences -> preferences[Keys.HAND_VISIBLE] ?: true }
+
+    suspend fun setHandVisible(visible: Boolean) {
+        dataStore.edit { preferences -> preferences[Keys.HAND_VISIBLE] = visible }
+    }
+
     suspend fun updateConfig(config: ClickerConfig) {
         dataStore.edit { preferences ->
             preferences[Keys.CELL_INDEX] = config.cellIndex
@@ -99,5 +114,6 @@ class ClickerConfigRepository(context: Context) {
         val FLASH = booleanPreferencesKey("flash_on_tap")
         val BUBBLE_X = intPreferencesKey("bubble_x")
         val BUBBLE_Y = intPreferencesKey("bubble_y")
+        val HAND_VISIBLE = booleanPreferencesKey("hand_visible")
     }
 }

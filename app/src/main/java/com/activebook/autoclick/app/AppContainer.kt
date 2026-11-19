@@ -36,6 +36,10 @@ class AppContainer(context: Context) {
     val config: StateFlow<ClickerConfig> = repository.config
         .stateIn(scope, SharingStarted.Eagerly, ClickerConfig.Default)
 
+    /** User preference: may the floating hand be on screen (on top of the overlay permission). */
+    val handVisible: StateFlow<Boolean> = repository.handVisible
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
     val coordinator: ClickerCoordinator = ClickerCoordinator(
         configProvider = { config.value },
         displayProvider = displayProvider,

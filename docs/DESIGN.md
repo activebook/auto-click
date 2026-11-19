@@ -143,13 +143,13 @@ for one outcome would eventually disagree (this was tried and removed — see PL
 
 | Property | Spec | Reason |
 |---|---|---|
-| Size | **56 dp** circle | Big enough to hit with a thumb, small enough to leave the grid usable |
-| Fill, idle | `surface` at **α 0.78** | Reads as glass over the host app, not a sticker |
-| Fill, running | `primary` at **α 0.80** | The whole disc becomes the state signal |
-| Border | 1 dp `outlineVariant` at α 0.55 | Defines the edge on light and dark hosts without a shadow |
+| Size | **40 dp** circle (1.6.5; was 56 → 44 → 36 → 40) | Big enough to keep the glyph and the state word clearly separated, small enough to stay a compact controller |
+| Fill, idle | app `surface` at **α 0.95** | Same white/green language as the rest of the app (1.6.5); theme-aware, so dark mode follows the app's dark surface |
+| Fill, running | app `primary` (teal-green) at **α 0.95** | The whole disc becomes the state signal |
+| Border | 1 dp `primary` at α 0.35 | A green-tinted hairline ties the hand to the app accent without a shadow |
 | Shadow | **none** | Compose paints a shaped shadow as an elevation halo around the *view*; around a circle that reads as a pale rectangular plate. Removed on purpose |
-| Glyph | Hand, 24 dp, in `onPrimary` (running) / `onSurface` (idle) | — |
-| Label | Under the glyph, **9 sp** bold, letter spacing 0.6: `ON` / `OFF` / `PAUSED` | A dot alone never told the user whether the loop was live, and vanished when idle. `PAUSED` is `#B45309` |
+| Glyph | Hand, 28 dp, above centre, in `onPrimary` (running) / `primary` (idle) | Sits flush above the state word; the glyph's bottom padding + the text's line leading leave a hairline of daylight so they never mix |
+| Label | Directly under the glyph, nudged up 2 dp (placement-only offset) so the gap is a ~2 dp hairline, **6 sp** bold, letter spacing 0.3: `ON` / `OFF` / `PAUSED` / `DONE` | The offset tightens the gap without moving the glyph. `OFF` `onSurfaceVariant`, `ON` `onPrimary`, `PAUSED` `#B45309`, `DONE` `#1B7F3B` |
 | Semantics | `AutoClick is tapping. Tap to open controls.` / `AutoClick finished its tap budget. Tap to open controls.` / `AutoClick is idle. Tap to open controls.` | Screen readers get the state *and* the affordance |
 
 ### 4.2 Behaviour
@@ -157,11 +157,12 @@ for one outcome would eventually disagree (this was tried and removed — see PL
 | Gesture | Result |
 |---|---|
 | Tap | Opens the panel (controls page) |
+| Long-press (hold ~400 ms, no movement) | Raises the hide popover (1.6.3): a one-button eye-off card over a full-screen scrim. Eye = hide hand + stop; any other tap dismisses. Moving past slop first cancels the hold (it's a drag); releasing early is a tap |
 | Drag | Moves the hand 1:1 with the finger. Drag begins only after the system touch slop, so a drag is never mistaken for a tap and vice versa |
-| Release | Snaps to the nearer screen edge, **12 dp** margin, **140 ms** animation; vertical position is kept exactly |
+| Release | Snaps to the nearer screen edge, **4 dp** margin (1.6.5; was 12), **140 ms** animation; vertical position is kept exactly. Horizontal placement uses the full display width (`overlayArea`), so curved-edge / side-bar insets don't add dead space |
 | Outside the screen | Clamped to the usable area; the hand can never be parked half off-screen |
 | Restart | Position is remembered (DataStore) and restored on the next launch / service restart |
-| First appearance | Default is the right edge less 12 dp, at 35 % of the screen height; after that the saved `bubble_x` / `bubble_y` is restored |
+| First appearance | Default is the right edge less 4 dp, at 35 % of the screen height; after that the saved `bubble_x` / `bubble_y` is restored |
 
 ### 4.3 What the hand is allowed to do to the tap
 
@@ -181,7 +182,7 @@ A circular progress ring around the hand turns the abstract interval into someth
 
 | Property | Spec | Reason |
 |---|---|---|
-| Geometry | 3 dp stroke at the disc perimeter, round caps, clockwise from the top (−90°) | Sits on the edge so it never overlaps the centred hand + label; no window resize needed |
+| Geometry | 2 dp stroke at the disc perimeter, round caps, clockwise from the top (−90°) | Sits on the edge so it never overlaps the centred hand + label; no window resize needed |
 | Track | Full circle in `onPrimary` at α 0.22 | Shows the whole path even at progress 0 |
 | Arc | `onPrimary`, sweep `360° × progress` | Contrasts the `primary` fill in both light and dark themes |
 | Timing | Fills 0 → 1 linearly over **one interval**, snaps to 0 on each delivered tap | The engine taps exactly one interval after the previous tap, so the ring completes right as the tap lands, then restarts — a countdown per cycle |
@@ -201,17 +202,19 @@ pages and no other chrome.
 
 | Element | Spec |
 |---|---|
-| Window | 212 dp wide, height wraps content, separate overlay window created only while expanded |
-| Card | `RoundedCornerShape(20.dp)`, `surface` at **α 0.90**, 1 dp `outlineVariant` at α 0.70, **no shadow**, no dim-behind |
-| Row | Three 46 dp circular buttons, evenly spaced |
-| Button 1 | Play / Stop. `primaryContainer` when idle, `errorContainer` when running. Semantics: `Start tapping` / `Stop tapping` |
-| Button 2 | Sliders glyph, `surfaceVariant`. Opens the settings page. Semantics: `Settings` |
-| Button 3 | **Close glyph (X)**, `surfaceVariant`. Closes the panel back to the hand. An X, not a chevron: a chevron promises "more below", which the panel does not have. Semantics: `Close panel` |
+| Window | 200 dp wide, height wraps content, separate overlay window created only while expanded |
+| Card | `RoundedCornerShape(18.dp)`, app `surface` at **α 0.95**, 1 dp `primary` at α 0.25, **no shadow**, no dim-behind. Same white/green language as the app (1.6.5); children use the app theme |
+| Row | Three 40 dp circular buttons, evenly spaced |
+| Button 1 | Play / Stop. `primary` / `onPrimary` when idle, `error` / `onError` when running. Semantics: `Start tapping` / `Stop tapping` |
+| Button 2 | Sliders glyph, `primaryContainer` / `onPrimaryContainer` (mint tint). Opens the settings page. Semantics: `Settings` |
+| Button 3 | **Close glyph (X)**, same mint tint. Closes the panel back to the hand. An X, not a chevron: a chevron promises "more below", which the panel does not have. Semantics: `Close panel` |
 | Error line | **Nothing by default.** The three buttons already say what the panel can do, so a permanent status line was pure repetition and height. A line appears *only* when a failure needs words (`labelSmall`, `error` colour, max 2 lines, ellipsised) |
 
 Auto-minimise: **160 ms after a *successful* Start** the panel collapses itself. A *refused* start
 leaves the panel open with the reason on the error line — folding it away would hide the only
-explanation.
+explanation. **Stop also collapses the panel** (immediately, since stop always succeeds): pressing
+Stop means "I'm done", so the window retracts to the hand exactly like Start instead of lingering
+over the app (1.6.2).
 
 ### 5.2 Settings page (inside the panel)
 
@@ -227,6 +230,26 @@ they are tapping.
 | Target | A nine-grid filling the panel width, **150 dp** tall. In exact mode it carries the same pin at the same fraction and no cell is highlighted; tapping any cell switches back to coarse aiming |
 | Interval | `Every` label, `−` / `+` 38 dp step buttons around a 46 dp read-out (`3s`), clamped at 1 s and 3600 s (disabled, not hidden) |
 | Summary | **none** — the grid shows the cell, the stepper shows the seconds; a `Row 3, column 2 · 5s` echo was the third copy of the same two facts |
+
+### 5.3 Hiding the hand (1.6.2, reworked 1.6.3)
+
+The hand can be put away completely, and brought back from the settings page. Hiding is **not** a
+silent headless mode: it stops the run, because a tap loop the user cannot see or stop would be a
+trap (ADR-021).
+
+| Surface | Action |
+|---|---|
+| Long-press the hand | Hide popover (eye-off card + scrim). Eye → stop + remove hand + wind the service down. Any other tap dismisses the popover (1.6.3; replaces the old panel-settings row). The popover is the one deliberately **dark** control (1.6.5), distinct from the white/green hand and panel |
+| Notification | `Hide hand` action while the service is alive (same effect) |
+| App settings page | `Show floating hand` switch — the way back. Always visible (not folded), disabled until the overlay permission is held |
+| Start (app / notification / panel) | Re-shows the hand automatically: a run always has a visible hand to stop it |
+
+While the popover is open its scrim owns the screen, so the tap guard skips every tick (an open
+menu never dispatches into itself); dismissing resumes normal ticking.
+
+Visibility is a persisted preference (`hand_visible`, default on) **on top of** the overlay
+permission: hand on screen = permission AND preference. The "Before you start" overlay switch still
+owns the *permission*; this switch owns *visibility*, so the two are not redundant.
 
 ### 5.3 Anchoring rules (the panel must stay beside the hand)
 
@@ -256,11 +279,12 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | 2 | **Status** | State dot + one of `Tapping` / `Paused` / `Finished` / `Needs attention` / `Idle`; right side `Every 3s`; **no detail paragraph** — the word and the button already say everything, and a failure sentence appears only on error; the primary **Start tapping / Stop tapping** button (52 dp, full width) |
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
-| 5 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Its centre is pressed.`, then `Pick a cell` / `Pick exact spot`; in exact mode a pin instead of a highlight and `Exact spot` + `65% · 34% from the top-left of the screen` |
-| 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 1 / 3 / 5 / 10 / 100`, a `Taps` field + `Apply` (`0–100000 taps · 0 = never`), and one explanatory line |
-| 7 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |
-| 8 | **Before you start** *(when complete)* | The same card, now collapsed to `All set`, at the bottom of the page |
-| 9 | Footer | `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.` |
+| 5 | **Floating hand** *(1.6.2)* | Always visible; `Show floating hand` switch. On: `The hand floats over other apps.` Off: `Hidden. Turn on to bring it back.` Without the overlay permission: disabled, `Needs "Display over other apps" first.` |
+| 6 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Its centre is pressed.`, then `Pick a cell` / `Pick exact spot`; in exact mode a pin instead of a highlight and `Exact spot` + `65% · 34% from the top-left of the screen` |
+| 7 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 1 / 3 / 5 / 10 / 100`, a `Taps` field + `Apply` (`0–100000 taps · 0 = never`), and one explanatory line |
+| 8 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |
+| 9 | **Before you start** *(when complete)* | The same card, now collapsed to `All set`, at the bottom of the page |
+| 10 | Footer | `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.` |
 
 ### 6.1 The moving permission card
 
@@ -447,7 +471,8 @@ Material 3 defaults, no custom font. Roles actually used: `headlineSmall` (app t
 | Surface | Shape | Elevation | Fill |
 |---|---|---|---|
 | App cards | 20 dp | **0** | `surface`, 1 dp `outlineVariant` border |
-| Panel / settings sheet | 20 dp | **0** | `surface` α 0.90 + 1 dp `outlineVariant` α 0.70 |
+| Panel / settings sheet | 18 dp | **0** | app `surface` α 0.95 + 1 dp `primary` α 0.25 |
+| Hide popover | 14 dp | **0** | dark glass `#101D19` α 0.93 + 1 dp white α 0.14 (the one dark control) |
 | Hand | circle | **0** | see §4.1 |
 | Pills (`Open`, `Done`) | 12 dp | 0 | outlined / `primaryContainer` |
 | Picker hint bar | 16 dp | 0 | `#F2101A1C` on a `#99101618` scrim |
@@ -490,6 +515,8 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 - `Interval` · `Seconds to wait between two taps.` · `Seconds` · `Apply` · `1–3600 s` · `1s 2s 5s 10s 30s 60s`
 - `Stop after` · `Never` · `1` · `3` · `5` · `10` · `100` · `Taps` · `Apply` · `0–100000 taps · 0 = never` · `Runs until you stop it.` · `Stops by itself after 100 taps.`
 - `Advanced` · `Feedback while it runs. Both on by default.` · `All on` / `Some off`
+- `Floating hand` · `Show floating hand` · `The hand floats over other apps.` · `Hidden. Turn on to bring it back.` · `Needs "Display over other apps" first.`
+- `Hide hand` (notification action) · long-press popover eye-off button (`Hide the floating hand and stop`)
 - `Vibrate` · `A short buzz on every tap.` · `Flash marker` · `A ring at the point you just tapped.`
 - `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.`
 - `Waiting for the screen to unlock (4 taps so far)` · `51 taps delivered · 0 skipped`
@@ -572,7 +599,7 @@ never disagree.
 | Panel buttons | Every icon button has a `contentDescription` (`Start tapping`, `Settings`, `Close panel`) |
 | Pills / step buttons | `Open the app`, `Close settings`, `Decrease interval`, `Increase interval` |
 | Cells | Number labels are always drawn; the selected cell keeps its number under the crosshair |
-| Contrast | Accent `#0F766E` on white and white on accent both clear 4.5:1; panel text sits on α 0.90 surface, which keeps it above 4.5:1 over busy hosts |
+| Contrast | Accent `#0F766E` on white and white on accent both clear 4.5:1; the floating hand/panel use the app theme (white surface + green accent in light mode, dark surface + teal in dark mode), so they match the app and stay legible; the dark hide popover uses light icons `#E8F3F0` on `#101D19` (>12:1) |
 | Font scale | Cards and panel wrap; the panel re-anchors on any height change, which also covers a larger font |
 
 ---

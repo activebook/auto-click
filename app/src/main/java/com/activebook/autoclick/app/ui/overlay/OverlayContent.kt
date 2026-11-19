@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,20 +46,49 @@ import androidx.compose.ui.unit.sp
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import kotlin.math.abs
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.font.FontWeight
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.ui.components.CloseGlyph
+import com.activebook.autoclick.app.ui.components.EyeOffGlyph
 import com.activebook.autoclick.app.ui.components.NineGrid
 import com.activebook.autoclick.app.ui.components.HandGlyph
 import com.activebook.autoclick.app.ui.components.PlayGlyph
 import com.activebook.autoclick.app.ui.components.SlidersGlyph
 import com.activebook.autoclick.app.ui.components.StopGlyph
 
+/** Hold this long without moving to raise the hide popover (system long-press is ~500 ms). */
+private const val HAND_LONG_PRESS_MS = 400L
+
 /**
- * The floating hand. One gesture handler drives both drag and tap, so a drag can never be
- * mistaken for a tap (and vice versa) — no double detectors fighting each other.
+ * The hide popover is the one deliberately dark control: a small "put it away" affordance that
+ * reads as distinct from the white/green hand and panel. Everything else follows the app theme.
+ */
+private val PodSolid = Color(0xFF101D19)
+private val PodFill = PodSolid.copy(alpha = 0.93f)
+private val PodBorder = Color(0xFFFFFFFF).copy(alpha = 0.14f)
+private val PodIcon = Color(0xFFE8F3F0)
+private val PodTonal = Color(0xFFFFFFFF).copy(alpha = 0.10f)
+
+/**
+ * Gesture state kept in a remembered holder so a recomposition mid-gesture (the countdown ring
+ * animates) cannot reset `dragging`/`longPressFired` or orphan the pending long-press job.
+ */
+private class BubbleGesture {
+    var downX = 0f
+    var downY = 0f
+    var dragging = false
+    var longPressFired = false
+    var longPressJob: Job? = null
+}
+
+/**
+ * The floating hand. One gesture handler drives drag, tap and long-press, so they can never be
+ * mistaken for one another: move past slop = drag, release early = tap, hold still = long-press.
  */
 @Composable
 fun BubbleContent(
@@ -70,27 +101,28 @@ fun BubbleContent(
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     onTap: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     val dragStartCallback by rememberUpdatedState(onDragStart)
     val dragCallback by rememberUpdatedState(onDrag)
     val dragEndCallback by rememberUpdatedState(onDragEnd)
     val tapCallback by rememberUpdatedState(onTap)
+    val longPressCallback by rememberUpdatedState(onLongPress)
 
     val context = LocalContext.current
     val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-    var downX = 0f
-    var downY = 0f
-    var dragging = false
+    val gesture = remember { BubbleGesture() }
+    val scope = rememberCoroutineScope()
 
-    // Translucent on purpose: the hand should look like it floats over the app, not like an
-    // opaque decal stuck to it. No drop shadow either - Compose renders that as a rectangular
-    // halo behind a circular view, which is exactly the "ugly plate" this avoids.
+    // Follows the app's white/green theme (surface + primary), like every other surface in the
+    // app, so the floating control reads as part of AutoClick rather than a foreign dark plate.
+    // Translucent + no shadow: glass over the host app, not a sticker or a rectangular halo.
     val bubbleColor = if (running) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.80f)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.95f)
     } else {
-        MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
     }
-    val glyphColor = if (running) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val glyphColor = if (running) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
 
     // Countdown ring: fills 0 -> 1 over one interval, then snaps back to 0 on the next delivered
     // tap (tapCount increments). Because the engine fires a tap exactly one interval after the
@@ -113,10 +145,10 @@ fun BubbleContent(
 
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(40.dp)
             .clip(CircleShape)
             .background(bubbleColor)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), CircleShape)
             // Raw MotionEvents, not Compose pointer positions: this window is moved *by* the
             // drag, so window-local coordinates shift under the finger and produce a feedback
             // loop (measured: jitter of +/-40 px and a drag that never matches the finger).
@@ -124,38 +156,53 @@ fun BubbleContent(
             .pointerInteropFilter { event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        downX = event.rawX
-                        downY = event.rawY
-                        dragging = false
-                        dragStartCallback(downX, downY)
+                        gesture.downX = event.rawX
+                        gesture.downY = event.rawY
+                        gesture.dragging = false
+                        gesture.longPressFired = false
+                        gesture.longPressJob?.cancel()
+                        // Arm the hold timer; a drag or an early release cancels it below.
+                        gesture.longPressJob = scope.launch {
+                            delay(HAND_LONG_PRESS_MS)
+                            if (!gesture.dragging) {
+                                gesture.longPressFired = true
+                                longPressCallback()
+                            }
+                        }
+                        dragStartCallback(gesture.downX, gesture.downY)
                         true
                     }
 
                     MotionEvent.ACTION_MOVE -> {
-                        if (!dragging &&
-                            (abs(event.rawX - downX) > touchSlop || abs(event.rawY - downY) > touchSlop)
+                        if (!gesture.dragging &&
+                            (abs(event.rawX - gesture.downX) > touchSlop ||
+                                abs(event.rawY - gesture.downY) > touchSlop)
                         ) {
-                            dragging = true
+                            gesture.dragging = true
+                            gesture.longPressJob?.cancel()
                         }
-                        if (dragging) dragCallback(event.rawX, event.rawY)
+                        if (gesture.dragging) dragCallback(event.rawX, event.rawY)
                         true
                     }
 
                     MotionEvent.ACTION_UP -> {
-                        if (dragging) {
+                        gesture.longPressJob?.cancel()
+                        if (gesture.dragging) {
                             // Events can be coalesced or dropped while the main thread is busy
                             // (the panel relayouts on every move), so commit the final pointer
                             // position here instead of relying on the last MOVE that arrived.
                             dragCallback(event.rawX, event.rawY)
                             dragEndCallback()
-                        } else {
+                        } else if (!gesture.longPressFired) {
                             tapCallback()
                         }
+                        // A fired long-press swallows the UP: the popover is already open.
                         true
                     }
 
                     MotionEvent.ACTION_CANCEL -> {
-                        if (dragging) dragEndCallback()
+                        gesture.longPressJob?.cancel()
+                        if (gesture.dragging) dragEndCallback()
                         true
                     }
 
@@ -177,7 +224,7 @@ fun BubbleContent(
         // looks exactly as it did before.
         Canvas(modifier = Modifier.matchParentSize()) {
             if (ringActive) {
-                val stroke = 3.dp.toPx()
+                val stroke = 2.dp.toPx()
                 val diameter = size.minDimension - stroke
                 val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
                 val arcSize = Size(diameter, diameter)
@@ -203,14 +250,14 @@ fun BubbleContent(
             }
         }
 
-        // A word instead of a dot: at 56 dp the dot alone never told the user whether the loop
-        // was live, and it vanished entirely when idle.
+        // Glyph above, state word below, flush against each other: the glyph's own bottom padding
+        // plus the text's line leading leave a hairline of daylight so they read separate without
+        // a wasted gap. The stack is centred as a whole on the 40 dp disc.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            HandGlyph(color = glyphColor, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.height(1.dp))
+            HandGlyph(color = glyphColor, modifier = Modifier.size(28.dp))
             Text(
                 text = when {
                     paused -> "PAUSED"
@@ -219,15 +266,19 @@ fun BubbleContent(
                     else -> "OFF"
                 },
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.sp,
-                    letterSpacing = 0.6.sp,
+                    fontSize = 6.sp,
+                    letterSpacing = 0.3.sp,
                     fontWeight = FontWeight.Bold,
                 ),
                 color = when {
                     paused -> Color(0xFFB45309)
                     finished -> Color(0xFF1B7F3B)
-                    else -> glyphColor
+                    running -> MaterialTheme.colorScheme.onPrimary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
+                // Placement-only nudge up: tightens the glyph/word gap without moving the glyph
+                // or changing the stack's measured height.
+                modifier = Modifier.offset(y = (-2).dp),
             )
         }
     }
@@ -237,6 +288,32 @@ fun BubbleContent(
 enum class PanelMode { CONTROLS, SETTINGS }
 
 /** Expanded control surface: start/stop, settings, collapse. Nothing else — the buttons say the rest. */
+/**
+ * The long-press hide popover: a single eye-off button in a small card. Tapping it hides the hand
+ * and stops the run; the full-screen scrim behind it dismisses on any other tap.
+ */
+@Composable
+fun HidePopover(onHide: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = PodFill,
+        border = BorderStroke(1.dp, PodBorder),
+        shadowElevation = 0.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(PodTonal)
+                .clickable(onClick = onHide)
+                .semantics { contentDescription = "Hide the floating hand and stop" },
+            contentAlignment = Alignment.Center,
+        ) {
+            EyeOffGlyph(color = PodIcon, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
 @Composable
 fun PanelContent(
     mode: PanelMode,
@@ -263,11 +340,11 @@ fun PanelContent(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
     ) {
         Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
             Row(
@@ -278,14 +355,14 @@ fun PanelContent(
                 PanelButton(
                     description = if (running) "Stop tapping" else "Start tapping",
                     containerColor = if (running) {
-                        MaterialTheme.colorScheme.errorContainer
+                        MaterialTheme.colorScheme.error
                     } else {
-                        MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.primary
                     },
                     contentColor = if (running) {
-                        MaterialTheme.colorScheme.onErrorContainer
+                        MaterialTheme.colorScheme.onError
                     } else {
-                        MaterialTheme.colorScheme.onPrimaryContainer
+                        MaterialTheme.colorScheme.onPrimary
                     },
                     onClick = onStartStop,
                 ) { color ->
@@ -294,8 +371,8 @@ fun PanelContent(
 
                 PanelButton(
                     description = "Settings",
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     onClick = onToggleSettings,
                 ) { color -> SlidersGlyph(color = color) }
 
@@ -304,8 +381,8 @@ fun PanelContent(
                 // and leaves the hand, which is exactly what an X means.
                 PanelButton(
                     description = "Close panel",
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     onClick = onCollapse,
                 ) { color -> CloseGlyph(color = color) }
             }
@@ -338,7 +415,7 @@ private fun PanelButton(
 ) {
     Box(
         modifier = Modifier
-            .size(46.dp)
+            .size(40.dp)
             .clip(CircleShape)
             .background(containerColor)
             .clickable(onClick = onClick)
@@ -365,11 +442,11 @@ private fun SettingsPanel(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),

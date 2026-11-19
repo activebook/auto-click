@@ -89,17 +89,18 @@ class OverlayService : Service() {
     }
 
     /**
-     * Puts the hand on screen if — and only if — the overlay permission is held.
+     * Puts the hand on screen if the overlay permission is held *and* the user allows the hand
+     * (ADR-021 amends ADR-016: visibility is permission AND a user preference). [force] bypasses
+     * the preference for an explicit Start/Show, which must never leave a silent headless run.
      *
-     * The bubble is now a pure function of that permission (ADR-016): there is no "show the hand"
-     * preference any more, so this has to be callable at runtime, not just once in [onCreate].
-     * That is what makes "grant the permission while a session is already running" work: the
-     * tapping continues and the hand simply appears.
+     * Callable at runtime, not just once in [onCreate], so "grant the permission while a session
+     * is already running" still works: the tapping continues and the hand simply appears.
      *
      * @return whether a bubble is on screen afterwards.
      */
-    private fun attachBubble(): Boolean {
+    private fun attachBubble(force: Boolean = false): Boolean {
         if (overlay != null) return true
+        if (!force && !container().handVisible.value) return false
         if (!Permissions.hasOverlayPermission(this)) return false
 
         val controller = OverlayController(
@@ -115,6 +116,7 @@ class OverlayService : Service() {
             },
             onStopTapping = { container().coordinator.stop() },
             onOpenApp = { openApp() },
+            onHideHand = { hideHand() },
         )
 
         try {
@@ -169,24 +171,33 @@ class OverlayService : Service() {
         overlayVisible.value = false
     }
 
+    /**
+     * User asked to hide the hand: remember the choice, take the hand away and stop the run it
+     * can no longer guard (no silent headless tapping), then let the service wind down so the
+     * notification goes with it. The hand comes back from the settings page (or a fresh Start).
+     */
+    private fun hideHand() {
+        scope.launch { container().repository.setHandVisible(false) }
+        releaseBubble()
+        stopSelf()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> container().coordinator.stop()
-            ACTION_HIDE -> {
-                releaseBubble()
-                stopSelf()
-            }
+            ACTION_HIDE -> hideHand()
             ACTION_START -> {
-                // Attach first (the permission may have arrived while a headless session ran),
-                // then refresh the guard bounds, then start: the first tick must already know
-                // where the bubble is, otherwise a bubble sitting on the target skips it.
-                attachBubble()
+                // Starting implies the hand should be visible (you need it to stop): clear a
+                // previous "hide", attach first, refresh the guard bounds, then start.
+                scope.launch { container().repository.setHandVisible(true) }
+                attachBubble(force = true)
                 overlay?.updateBoundsNow()
                 container().coordinator.start()
             }
             ACTION_SHOW -> {
+                scope.launch { container().repository.setHandVisible(true) }
                 // No bubble and no permission: do not sit here pretending to be useful.
-                if (!attachBubble()) {
+                if (!attachBubble(force = true)) {
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -270,6 +281,14 @@ class OverlayService : Service() {
                 .setAction(if (running) ACTION_STOP else ACTION_START),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        // While the service is alive the hand can be hidden straight from the shade; once hidden
+        // the service stops, so bringing it back lives in the app's settings page.
+        val hideIntent = PendingIntent.getService(
+            this,
+            REQUEST_HIDE,
+            Intent(this, OverlayService::class.java).setAction(ACTION_HIDE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_autoclick)
@@ -286,6 +305,7 @@ class OverlayService : Service() {
                 getString(if (running) R.string.notification_action_stop else R.string.notification_action_start),
                 actionIntent,
             )
+            .addAction(0, getString(R.string.notification_action_hide), hideIntent)
             .build()
     }
 
@@ -347,6 +367,7 @@ class OverlayService : Service() {
         private const val NOTIFICATION_ID = 4711
         private const val REQUEST_TOGGLE = 10
         private const val REQUEST_OPEN = 11
+        private const val REQUEST_HIDE = 12
 
         private val overlayVisible = MutableStateFlow(false)
 

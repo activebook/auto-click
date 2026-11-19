@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 
@@ -137,6 +138,34 @@ fun CloseGlyph(color: Color, modifier: Modifier = Modifier) {
             color = color,
             start = Offset(size.width * 0.72f, size.height * 0.28f),
             end = Offset(size.width * 0.28f, size.height * 0.72f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+/** An eye with a slash through it: "hide the floating hand". */
+@Composable
+fun EyeOffGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(20.dp)) {
+        val stroke = size.minDimension * 0.10f
+        // Eye outline (lens shape) approximated by a circle, plus a pupil.
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.30f,
+            center = Offset(size.width * 0.5f, size.height * 0.5f),
+            style = Stroke(width = stroke),
+        )
+        drawCircle(
+            color = color,
+            radius = size.minDimension * 0.10f,
+            center = Offset(size.width * 0.5f, size.height * 0.5f),
+        )
+        // The slash that reads as "off".
+        drawLine(
+            color = color,
+            start = Offset(size.width * 0.22f, size.height * 0.78f),
+            end = Offset(size.width * 0.78f, size.height * 0.22f),
             strokeWidth = stroke,
             cap = StrokeCap.Round,
         )

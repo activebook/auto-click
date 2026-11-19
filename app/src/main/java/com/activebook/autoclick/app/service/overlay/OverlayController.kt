@@ -31,6 +31,7 @@ import com.activebook.autoclick.app.ui.overlay.PanelMode
 import com.activebook.autoclick.app.ui.theme.AutoClickTheme
 import com.activebook.autoclick.app.ui.failureMessage
 import com.activebook.autoclick.app.ui.overlay.BubbleContent
+import com.activebook.autoclick.app.ui.overlay.HidePopover
 import com.activebook.autoclick.app.ui.overlay.PanelContent
 import kotlin.math.max
 import kotlinx.coroutines.CoroutineScope
@@ -61,6 +62,7 @@ class OverlayController(
     private val onStartTapping: () -> Unit,
     private val onStopTapping: () -> Unit,
     private val onOpenApp: () -> Unit,
+    private val onHideHand: () -> Unit,
 ) : OverlayGuard {
 
     private val windowManager: WindowManager =
@@ -69,11 +71,12 @@ class OverlayController(
         }
 
     private val density = context.resources.displayMetrics.density
-    private val bubbleSizePx = (56 * density).toInt()
-    private val panelWidthPx = (212 * density).toInt()
-    private val panelEstimateHeightPx = (108 * density).toInt()
+    private val bubbleSizePx = (40 * density).toInt()
+    private val panelWidthPx = (200 * density).toInt()
+    private val panelEstimateHeightPx = (56 * density).toInt()
     private val crosshairSizePx = (30 * density).toInt()
-    private val edgeMarginPx = (12 * density).toInt()
+    private val hidePopoverSizePx = (44 * density).toInt()
+    private val edgeMarginPx = (4 * density).toInt()
     private val gapPx = (8 * density).toInt()
 
     private var bubbleView: ComposeView? = null
@@ -87,6 +90,16 @@ class OverlayController(
 
     private var crosshairView: CrosshairView? = null
     private var crosshairParams: WindowManager.LayoutParams? = null
+
+    // Long-press hide popover: a full-screen transparent scrim catches "tap anywhere else",
+    // with a small eye-off card above it. While open the guard skips every tick (the scrim would
+    // otherwise swallow dispatched taps), so an open menu never taps into itself.
+    private var hideScrimView: View? = null
+    private var hidePopoverView: ComposeView? = null
+    private var hidePopoverOwner: OverlayLifecycleOwner? = null
+
+    @Volatile
+    private var hideMenuOpen = false
 
     @Volatile
     private var bubbleBounds: ScreenRect? = null
@@ -141,7 +154,7 @@ class OverlayController(
 
     fun show() {
         if (bubbleView != null) return
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
         val defaultX = (area.right - bubbleSizePx - edgeMarginPx).toInt()
@@ -152,6 +165,7 @@ class OverlayController(
     }
 
     fun hide() {
+        dismissHidePopover()
         collapsePanel()
         removeCrosshair()
         bubbleView?.let { view -> runCatching { windowManager.removeView(view) } }
@@ -166,7 +180,7 @@ class OverlayController(
     fun onConfigurationChanged() {
         val view = bubbleView ?: return
         val params = bubbleParams ?: return
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
         params.x = params.x.coerceIn(area.left.toInt(), max(area.left.toInt(), (area.right - bubbleSizePx).toInt()))
@@ -179,6 +193,8 @@ class OverlayController(
     // ---------------------------------------------------------------- guard
 
     override fun overlaps(point: ScreenPoint): Boolean {
+        // An open hide menu owns the whole screen via its scrim; never dispatch into it.
+        if (hideMenuOpen) return true
         bubbleBounds?.let { if (it.contains(point)) return true }
         panelBounds?.let { if (it.contains(point)) return true }
         return false
@@ -202,6 +218,9 @@ class OverlayController(
                     intervalMs = configState.value.intervalMs,
                     tapCount = tapCountState.longValue,
                     onDragStart = { x, y ->
+                        // A fresh touch on the hand dismisses an open hide menu (the scrim would
+                        // catch it anyway once the finger lifts, but a drag should clear it now).
+                        dismissHidePopover()
                         dragDownScreenX = x
                         dragDownScreenY = y
                         dragAnchorWindowX = bubbleParams?.x ?: 0
@@ -210,6 +229,7 @@ class OverlayController(
                     onDrag = { x, y -> dragBubbleTo(x, y) },
                     onDragEnd = { endDragBubble() },
                     onTap = { onBubbleTap() },
+                    onLongPress = { showHidePopover() },
                 )
             }
         }
@@ -246,7 +266,7 @@ class OverlayController(
     private fun dragBubbleTo(screenX: Float, screenY: Float) {
         val view = bubbleView ?: return
         val params = bubbleParams ?: return
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
         val minX = area.left.toInt()
@@ -278,7 +298,7 @@ class OverlayController(
         if (panelExpanded) refreshPanelPlacement()
         val view = bubbleView ?: return
         val params = bubbleParams ?: return
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
         val snapX = if (params.x + bubbleSizePx / 2f < area.center.x) {
@@ -359,6 +379,10 @@ class OverlayController(
                     onStartStop = {
                         if (runningState.value) {
                             onStopTapping()
+                            // Stop means "I'm done" — fold the panel back to the hand exactly like
+                            // Start does, instead of leaving an open window over the app. Stop
+                            // always succeeds, so no grace period is needed.
+                            collapsePanel()
                         } else {
                             onStartTapping()
                             // Get out of the way the moment tapping begins. The check runs one
@@ -469,7 +493,7 @@ class OverlayController(
 
     private fun computePanelPosition(params: WindowManager.LayoutParams) {
         val bubble = bubbleParams ?: return
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
         val bubbleCenterX = bubble.x + bubbleSizePx / 2f
@@ -493,7 +517,7 @@ class OverlayController(
         val view = panelView ?: return
         val params = panelParams ?: return
         val bubble = bubbleParams ?: return
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
         val measuredHeight = view.height.takeIf { it > 0 } ?: return
@@ -512,6 +536,109 @@ class OverlayController(
         runCatching { windowManager.updateViewLayout(view, params) }
     }
 
+    // ---------------------------------------------------------------- hide popover
+
+    /**
+     * Long-press on the hand raises a one-button popover (eye-off) over a full-screen scrim.
+     * The eye hides the hand and stops the run; tapping anywhere else (the scrim) just dismisses.
+     */
+    private fun showHidePopover() {
+        if (hidePopoverView != null) {
+            dismissHidePopover()
+            return
+        }
+        if (bubbleView == null) return
+        collapsePanel()
+
+        val scrim = View(context).apply {
+            setBackgroundColor(0x00000000)
+            setOnClickListener { dismissHidePopover() }
+        }
+        val scrimParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+
+        val owner = OverlayLifecycleOwner().also { it.onCreate() }
+        val popover = composeView(owner) {
+            AutoClickTheme {
+                HidePopover(
+                    onHide = {
+                        dismissHidePopover()
+                        onHideHand()
+                    },
+                )
+            }
+        }
+        val popoverParams = WindowManager.LayoutParams(
+            hidePopoverSizePx,
+            hidePopoverSizePx,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+        computeHidePopoverPosition(popoverParams)
+
+        // Scrim first, popover above it: outside taps land on the scrim, the eye stays clickable.
+        val added = runCatching {
+            windowManager.addView(scrim, scrimParams)
+            windowManager.addView(popover, popoverParams)
+        }.isSuccess
+        if (!added) {
+            runCatching { windowManager.removeView(scrim) }
+            runCatching { windowManager.removeView(popover) }
+            owner.onDestroy()
+            return
+        }
+        hideScrimView = scrim
+        hidePopoverView = popover
+        hidePopoverOwner = owner
+        hideMenuOpen = true
+        popover.alpha = 0f
+        popover.animate().alpha(1f).setDuration(120L).start()
+    }
+
+    private fun dismissHidePopover() {
+        val popover = hidePopoverView
+        val scrim = hideScrimView
+        val owner = hidePopoverOwner
+        hidePopoverView = null
+        hideScrimView = null
+        hidePopoverOwner = null
+        hideMenuOpen = false
+        popover?.animate()?.cancel()
+        if (popover != null) runCatching { windowManager.removeView(popover) }
+        if (scrim != null) runCatching { windowManager.removeView(scrim) }
+        owner?.onDestroy()
+    }
+
+    private fun computeHidePopoverPosition(params: WindowManager.LayoutParams) {
+        val bubble = bubbleParams ?: return
+        val area = displayProvider.overlayArea()
+        if (area.isEmpty) return
+        val bubbleCenterX = bubble.x + bubbleSizePx / 2f
+        val preferredX = if (bubbleCenterX < area.center.x) {
+            bubble.x + bubbleSizePx + gapPx
+        } else {
+            bubble.x - hidePopoverSizePx - gapPx
+        }
+        params.x = preferredX.coerceIn(
+            area.left.toInt(),
+            max(area.left.toInt(), (area.right - hidePopoverSizePx).toInt()),
+        )
+        params.y = (bubble.y + bubbleSizePx / 2f - hidePopoverSizePx / 2f).toInt().coerceIn(
+            area.top.toInt(),
+            max(area.top.toInt(), (area.bottom - hidePopoverSizePx).toInt()),
+        )
+    }
+
     // ---------------------------------------------------------------- crosshair
 
     private fun ensureCrosshair(point: ScreenPoint): CrosshairView? {
@@ -521,7 +648,7 @@ class OverlayController(
             return existing
         }
 
-        val area = displayProvider.usableArea()
+        val area = displayProvider.overlayArea()
         if (area.isEmpty) return null
 
         val view = CrosshairView(context)
@@ -600,7 +727,7 @@ class OverlayController(
             // The marker must show what the engine is aiming at *now*: an exact point is not a
             // cell centre, and showing the cell's centre would be a lie the user has no way to
             // disprove — it is their only evidence of where the tap went.
-            val area = displayProvider.usableArea()
+            val area = displayProvider.overlayArea()
             if (!area.isEmpty) ensureCrosshair(config.target.resolveIn(area))
         } else {
             removeCrosshair()
@@ -672,7 +799,7 @@ class OverlayController(
             val saved = repository.bubblePosition.first()
             val params = bubbleParams ?: return@launch
             val view = bubbleView ?: return@launch
-            val area = displayProvider.usableArea()
+            val area = displayProvider.overlayArea()
             if (area.isEmpty) return@launch
 
             params.x = saved?.x?.coerceIn(

@@ -289,6 +289,7 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
 | `haptic_on_tap` | Boolean | `true` |
 | `flash_on_tap` | Boolean | `true` |
 | `bubble_x` / `bubble_y` | Int | last drag position |
+| `hand_visible` | Boolean | `true` (1.6.2; visibility preference on top of the overlay permission) |
 
 Every read funnels through `ClickerConfig.of(...)`, which clamps cell into `0..8`, interval into
 `1..3600 s`, the tap budget into `0..100 000` and the exact point into `0..1` on both axes — a
@@ -459,10 +460,14 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 013 | `dist/AutoClick-<version>.apk` naming, canonical Gradle artifact untouched | Accepted |
 | 014 | The tap loop must not depend on the bubble (headless mode) | Accepted |
 | 015 | A permission switch is a remote control for its system screen, never a fake toggle | Accepted |
-| 016 | The hand's existence is the overlay permission, not a preference | Accepted |
+| 016 | The hand's existence is the overlay permission, not a preference | **Amended by 021** — visibility is now permission AND a user preference |
 | 017 | Hand-off notice as an overlay window | **Superseded** — force-hidden on that screen |
 | 018 | Hand-off notice as two text Toasts | Accepted |
 | 020 | Countdown ring driven by delivered-tap events (`tapEvents`), not a separate timer | Accepted — a second timer would drift out of step with the real taps |
+| 021 | Hand visibility = overlay permission AND persisted `hand_visible`; hiding stops the run (no headless); Start re-shows; re-show lives in the settings page | Accepted — a tap loop the user cannot see or stop would be a trap |
+| 022 | Hide entry is a long-press popover (eye-off card + full-screen scrim), not a panel row; while open the guard skips all ticks | Accepted — one gesture instead of three taps; the scrim must not swallow dispatched taps |
+| 023 | Floating hand / panel / hide popover share one fixed dark-teal "pod" palette + a scoped `LocalColorScheme`; hand shrunk 56→44 dp | **Superseded by 024** — the fixed dark pod broke consistency with the app's white/green theme |
+| 024 | Hand + panel follow the app theme (white/green, theme-aware); only the hide popover stays dark; hand shrunk to 36 dp | Accepted — floating controls must read as part of the app, not a foreign dark plate; the dark eye is a deliberate "put it away" exception |
 
 ---
 

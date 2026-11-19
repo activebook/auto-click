@@ -38,6 +38,31 @@ class AndroidDisplayProvider(private val context: Context) : DisplayProvider {
     }
 
     /**
+     * Floating-control placement: keep the vertical system-bar / cutout insets (so the hand never
+     * hides under the status or navigation bar) but span the full display width, so the hand can
+     * hug the physical edge instead of stopping short of curved-edge / side-bar insets.
+     */
+    override fun overlayArea(): ScreenRect {
+        val windowManager = context.getSystemService(WindowManager::class.java)
+            ?: return ScreenRect(0f, 0f, 0f, 0f)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = windowManager.maximumWindowMetrics
+            val bounds = metrics.bounds
+            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+            )
+            ScreenRect(
+                left = bounds.left.toFloat(),
+                top = (bounds.top + insets.top).toFloat(),
+                right = bounds.right.toFloat(),
+                bottom = (bounds.bottom - insets.bottom).toFloat(),
+            )
+        } else {
+            legacyArea(windowManager)
+        }
+    }
+
+    /**
      * API 26-29 fallback. Estimated from framework dimensions: accurate on the overwhelming
      * majority of devices that still run those releases.
      */

@@ -26,6 +26,14 @@ interface ClickSink {
 /** Supplies the current usable screen area (display minus system bars), in screen pixels. */
 interface DisplayProvider {
     fun usableArea(): ScreenRect
+
+    /**
+     * Area for placing the floating controls: same vertical insets as [usableArea] (status /
+     * navigation bars) but the *full* display width, ignoring left/right cutout or bar insets.
+     * Tap targets stay inside [usableArea]; the hand/panel may hug the physical edge so they
+     * don't waste space on curved-edge or gesture-bar insets. Defaults to [usableArea].
+     */
+    fun overlayArea(): ScreenRect = usableArea()
 }
 
 /** Lets the engine know whether its own floating bubble sits on top of the tap target. */
