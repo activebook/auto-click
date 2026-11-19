@@ -131,6 +131,9 @@ class OverlayController(
     private val finishedState = mutableStateOf(false)
     private val errorLineState = mutableStateOf<String?>(null)
 
+    /** Increments on every delivered tap; the bubble's countdown ring restarts on each change. */
+    private val tapCountState = mutableStateOf(0L)
+
     val isShowing: Boolean get() = bubbleView != null
 
     // ---------------------------------------------------------------- lifecycle
@@ -195,6 +198,8 @@ class OverlayController(
                     running = runningState.value,
                     paused = pausedState.value,
                     finished = finishedState.value,
+                    intervalMs = configState.value.intervalMs,
+                    tapCount = tapCountState.value,
                     onDragStart = { x, y ->
                         dragDownScreenX = x
                         dragDownScreenY = y
@@ -573,7 +578,13 @@ class OverlayController(
         }
 
         scope.launch {
-            coordinator.tapEvents.collect { point -> flashTap(point) }
+            coordinator.tapEvents.collect { point ->
+                // Drive the countdown ring off the same delivered-tap signal as the crosshair
+                // flash, so the ring resets exactly when a tap lands — independent of whether
+                // the flash itself is switched on.
+                tapCountState.value += 1
+                flashTap(point)
+            }
         }
     }
 

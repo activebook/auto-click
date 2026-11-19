@@ -1,5 +1,9 @@
 package com.activebook.autoclick.app.ui.overlay
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,12 +22,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -54,6 +64,8 @@ fun BubbleContent(
     running: Boolean,
     paused: Boolean,
     finished: Boolean,
+    intervalMs: Long,
+    tapCount: Long,
     onDragStart: (Float, Float) -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
@@ -79,6 +91,25 @@ fun BubbleContent(
         MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)
     }
     val glyphColor = if (running) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+
+    // Countdown ring: fills 0 -> 1 over one interval, then snaps back to 0 on the next delivered
+    // tap (tapCount increments). Because the engine fires a tap exactly one interval after the
+    // previous one, the ring reaches the top right as the tap lands — a visible countdown that
+    // restarts every cycle. Paused or idle hides it; the ring is a live-run cue, not a dial.
+    val ringActive = running && !paused
+    val ringColor = MaterialTheme.colorScheme.onPrimary
+    val ringProgress = remember { Animatable(0f) }
+    LaunchedEffect(ringActive, tapCount, intervalMs) {
+        if (!ringActive) {
+            ringProgress.snapTo(0f)
+            return@LaunchedEffect
+        }
+        ringProgress.snapTo(0f)
+        ringProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = intervalMs.toInt(), easing = LinearEasing),
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -140,6 +171,38 @@ fun BubbleContent(
             },
         contentAlignment = Alignment.Center,
     ) {
+        // The countdown ring sits at the perimeter, under the hand and label (which stay centred
+        // and never overlap it). A faint full track shows the path; the bright arc sweeps clockwise
+        // from the top once per interval. Drawn only while a run is live, so an idle or paused hand
+        // looks exactly as it did before.
+        Canvas(modifier = Modifier.matchParentSize()) {
+            if (ringActive) {
+                val stroke = 3.dp.toPx()
+                val diameter = size.minDimension - stroke
+                val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+                val arcSize = Size(diameter, diameter)
+                val ringStyle = Stroke(width = stroke, cap = StrokeCap.Round)
+                drawArc(
+                    color = ringColor.copy(alpha = 0.22f),
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = ringStyle,
+                )
+                drawArc(
+                    color = ringColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f * ringProgress.value,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = ringStyle,
+                )
+            }
+        }
+
         // A word instead of a dot: at 56 dp the dot alone never told the user whether the loop
         // was live, and it vanished entirely when idle.
         Column(
