@@ -151,8 +151,11 @@ private fun GridPickerScreen(
             NineGrid(
                 selectedIndex = config.cellIndex,
                 onSelect = onPickCell,
-                labelStyle = MaterialTheme.typography.headlineSmall,
+                labelStyle = MaterialTheme.typography.titleLarge,
                 showLabelWhenSelected = true,
+                // Numbers sit in a corner so the middle of the screen stays empty: that is where
+                // the hint goes, and it is also the first place a thumb reaches for.
+                labelAlignment = Alignment.TopStart,
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -168,19 +171,15 @@ private fun GridPickerScreen(
             )
         }
 
-        // The only chrome left. No background, no pointer handler of its own, one line: it explains
-        // the mode and still lets the tap it is explaining reach the layer underneath. Back is the
-        // way out, so a Cancel button would be another control competing with the aim.
+        // The whole of the chrome: one large line, dead centre, no panel and no pointer handler,
+        // so it explains the screen without taking a single tap away from it. There is no Cancel:
+        // a tap *is* the answer, and Back is how you leave, so a button would only cover the thing
+        // the user came to see.
         TipLine(
-            text = if (mode == TargetMode.CELL) {
-                "Tap a third of the screen \u00b7 Back to cancel"
-            } else {
-                "Tap the exact spot \u00b7 Back to cancel"
-            },
+            text = if (mode == TargetMode.CELL) "Tap a cell" else "Tap the exact spot",
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(bottom = 18.dp, start = 24.dp, end = 24.dp),
+                .align(Alignment.Center)
+                .padding(horizontal = 24.dp),
         )
     }
 }
@@ -278,13 +277,14 @@ private fun ExactSpotLayer(
 private fun TipLine(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge.copy(
+        // Big on purpose: it steals no taps, so it can afford to be read at a glance. A background
+        // would be the only thing here that could cover the screen, and it is not needed — a
+        // shadow keeps the words legible over any app.
+        style = MaterialTheme.typography.headlineSmall.copy(
             textAlign = TextAlign.Center,
-            // A shadow instead of a panel: legible over any app, yet nothing solid sits over the
-            // screen the user is about to press.
-            shadow = Shadow(color = Color(0xCC000000), offset = Offset(0f, 1f), blurRadius = 6f),
+            shadow = Shadow(color = Color(0xCC000000), offset = Offset(0f, 2f), blurRadius = 8f),
         ),
-        color = Color(0xF2FFFFFF),
+        color = Color(0xFFFFFFFF),
         modifier = modifier,
     )
 }

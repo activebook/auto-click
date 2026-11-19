@@ -102,12 +102,12 @@ mode, where the nine zones (or the exact-point layer) cover the **real** display
 | Element | Spec |
 |---|---|
 | Zones | The real usable area, `2 dp` inset, nine thirds, light scrim `#99101618` over the app beneath so the target app stays readable |
-| Labels | `headlineSmall` numbers; the selected zone keeps its number *under* the crosshair so it is never a blank block |
-| Chrome | **One line of text and nothing else**: `Tap a third of the screen · Back to cancel` (cell) or `Tap the exact spot · Back to cancel` (exact), bottom-centre, no panel, no button, no pointer handler of its own — so the tap it explains still reaches the layer underneath. Any bar, however thin, was rejected: it sits on the screen the user is trying to see |
+| Labels | `titleLarge` numbers in each zone's **top-left corner**, leaving the middle of the screen empty for the tip and for the thumb. A corner number is an index; the crosshair (centre only) is the aim |
+| Chrome | **One large line, dead centre, and nothing else**: `Tap a cell` (cell) or `Tap the exact spot` (exact) — `headlineSmall`, white, drop shadow, no panel, no button, no pointer handler of its own, so the tap it explains still reaches the layer underneath. Big *because* it steals nothing. Any bar was rejected: it sits on the screen the user is trying to see |
 | Selection (Cell) | Tapping a zone writes the cell index and closes the activity immediately |
 | Exact mode | The third lines stay as faint guides, the stored spot is ringed faintly, a bright crosshair follows the finger, and releasing commits the touch point as a fraction of the same usable area |
 | Mode switch | **Absent inside the picker** — it was chosen by the button that opened it. No snapping either: "near a centre means the cell" would silently rewrite a deliberate pixel the user could neither see nor undo |
-| Leaving | System Back. The tip says so in the same line it uses to explain the aim, which is why no `Cancel` button is needed |
+| Leaving | System Back — and that is all. No `Cancel` text and no button: the tap *is* the answer, so anything else on screen is a control that covers a place someone might want to press |
 
 Cell mode stores only the **cell index**; exact mode stores a **fraction**, never a raw pixel — so
 both survive rotation. The committed touch is mapped with the window's own location on screen, so a
@@ -484,8 +484,8 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 
 **Picker**
 
-- `Tap a third of the screen · Back to cancel` · `Tap the exact spot · Back to cancel`
-- nothing else — no chips, no bar, no background: the picker is the screen
+- `Tap a cell` · `Tap the exact spot`
+- nothing else — no chips, no bar, no background, no Cancel: one line of text over the screen
 
 **System surfaces**
 

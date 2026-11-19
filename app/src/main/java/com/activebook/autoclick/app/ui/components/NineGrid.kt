@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +56,7 @@ fun NineGrid(
     labelStyle: TextStyle = MaterialTheme.typography.labelMedium,
     showLabelWhenSelected: Boolean = false,
     pointMarker: RelativePoint? = null,
+    labelAlignment: Alignment = Alignment.Center,
 ) {
     val pinColor = MaterialTheme.colorScheme.primary
     Box(modifier = modifier) {
@@ -64,6 +66,7 @@ fun NineGrid(
             labelStyle = labelStyle,
             showLabelWhenSelected = showLabelWhenSelected,
             showSelection = pointMarker == null,
+            labelAlignment = labelAlignment,
         )
         if (pointMarker != null) {
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -86,6 +89,7 @@ private fun NineCells(
     labelStyle: TextStyle,
     showLabelWhenSelected: Boolean,
     showSelection: Boolean,
+    labelAlignment: Alignment,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -125,19 +129,25 @@ private fun NineCells(
                             .semantics {
                                 contentDescription = "Target cell ${index + 1}"
                             },
-                        contentAlignment = Alignment.Center,
+                        contentAlignment = labelAlignment,
                     ) {
                         if (selected) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                CrosshairGlyph(color = MaterialTheme.colorScheme.primary)
+                                // The crosshair means "the tap lands here", which is only true of a
+                                // cell's centre. Corner-aligned labels (the full-screen picker) are
+                                // indices, not aims, so they do not get one.
+                                if (labelAlignment == Alignment.Center) {
+                                    CrosshairGlyph(color = MaterialTheme.colorScheme.primary)
+                                }
                                 if (showLabelWhenSelected) {
                                     Text(
                                         text = "${index + 1}",
                                         style = labelStyle,
                                         color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(12.dp),
                                     )
                                 }
                             }
@@ -146,6 +156,7 @@ private fun NineCells(
                                 text = "${index + 1}",
                                 style = labelStyle,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp),
                             )
                         }
                     }
