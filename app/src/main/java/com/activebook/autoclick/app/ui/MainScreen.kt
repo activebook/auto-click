@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.activebook.autoclick.app.domain.geometry.GridGeometry
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.ClickerState
+import com.activebook.autoclick.app.domain.model.TargetMode
 import com.activebook.autoclick.app.ui.components.ChevronDownGlyph
 import com.activebook.autoclick.app.ui.components.HandGlyph
 import com.activebook.autoclick.app.ui.components.NineGrid
@@ -91,8 +92,7 @@ fun MainScreen(
     onToggleAccessibility: (Boolean) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
     onToggleBattery: (Boolean) -> Unit,
-    onPickOnScreen: () -> Unit,
-    onUseGridTarget: () -> Unit,
+    onPickTarget: (TargetMode) -> Unit,
 ) {
     val running = state is ClickerState.Running
     // Two switches actually gate tapping: Access for the tap itself, and Display over other apps
@@ -147,11 +147,7 @@ fun MainScreen(
 
         SectionCard(
             title = "Where to tap",
-            subtitle = if (config.isExactPoint) {
-                "One fixed spot on the screen."
-            } else {
-                "One cell of a 3x3 grid; the tap lands in its centre."
-            },
+            subtitle = "A cell centre, or any spot you point at.",
         ) {
             // Compact on purpose: this is an indicator of *where* the tap lands, not a control
             // surface the size of the screen. A small square next to the description reads faster.
@@ -178,28 +174,40 @@ fun MainScreen(
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    if (config.isExactPoint) {
-                        Text(
-                            text = percentOf(config.point.x) + " · " + percentOf(config.point.y),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    TextButton(
-                        onClick = onPickOnScreen,
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-                    ) {
-                        Text(if (config.isExactPoint) "Pick another spot" else "Pick on screen")
-                    }
-                    if (config.isExactPoint) {
-                        TextButton(
-                            onClick = onUseGridTarget,
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                        ) {
-                            Text("Back to grid centres")
-                        }
-                    }
+                    Text(
+                        text = if (config.isExactPoint) {
+                            percentOf(config.point.x) + " · " + percentOf(config.point.y) +
+                                " from the top-left of the screen"
+                        } else {
+                            "Its centre is pressed."
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Two entries instead of one generic "pick on screen": the mode is decided *before*
+            // the screen is covered, so the picker never has to ask a question while it is in the
+            // way of the very thing being picked. The filled one is the live mode.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TargetPickButton(
+                    text = "Pick a cell",
+                    active = !config.isExactPoint,
+                    onClick = { onPickTarget(TargetMode.CELL) },
+                    modifier = Modifier.weight(1f),
+                )
+                TargetPickButton(
+                    text = "Pick exact spot",
+                    active = config.isExactPoint,
+                    onClick = { onPickTarget(TargetMode.POINT) },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
@@ -746,4 +754,32 @@ private fun SectionCard(
 }
 
 /** "52%" — two digits are enough to tell two spots apart and never look like a precision claim. */
+@Composable
+private fun TargetPickButton(
+    text: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(44.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (active) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            contentColor = if (active) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        ),
+    ) {
+        Text(text = text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+    }
+}
+
 private fun percentOf(fraction: Float): String = (fraction * 100f).roundToInt().toString() + "%"

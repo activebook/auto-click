@@ -77,33 +77,37 @@ On the reference device (1080 × 2408, usable `(0,108)–(1080,2408)`) the nine 
 
 **A. The in-app grid (everyday).** A **132 dp** square at the start of a row, nine tappable thirds,
 the selected cell outlined with the accent colour and its number kept visible. Beside it: the cell's
-name and a `Pick on screen` text button. Compact on purpose — this is an *indicator of where the tap
-lands*, not a control surface the size of the screen.
+name and one line saying what will happen (`Its centre is pressed.`). Compact on purpose — this is an
+*indicator of where the tap lands*, not a control surface the size of the screen.
 
-**A2. Exact spot (precision).** Any row of the card can also hold a *point* instead of a cell: the
-grid then shows a **pin** at that spot and no cell is highlighted, the card reads `Exact spot` with
-the spot's percentages underneath, and two text buttons appear — `Pick another spot` and
-`Back to grid centres`. Tapping any cell in the grid also goes back to coarse aiming, so leaving
-exact mode never needs a separate control. A pin is deliberately *not* snapped to the nearest cell:
-that would show a cell while the engine pressed a pixel.
+Under the row sit **two entries**, `Pick a cell` and `Pick exact spot`. The mode is decided *before*
+the screen is covered; whichever mode is live is the filled one. One generic `Pick on screen` button
+plus a switch inside the picker was rejected: a control that changes the meaning of aiming does not
+belong on the screen you are aiming at.
+
+**A2. Exact spot (precision).** The card can also hold a *point* instead of a cell: the grid then
+shows a **pin** at that spot and no cell is highlighted, and the card reads `Exact spot` with
+`65% · 34% from the top-left of the screen`. Both entries stay visible, so switching back is just
+pressing `Pick a cell`; tapping any cell in the grid does the same thing. A pin is deliberately
+*not* snapped to the nearest cell: that would show a cell while the engine pressed a pixel.
 
 **Precise points are fractions of the usable area** (`0..1` in both axes), not screen pixels, and
 they are re-resolved on every tick. Rotation, a resolution change or a taller status bar therefore
 moves the target with the screen instead of leaving it stranded outside. They are also *fixed screen
 coordinates*: the point does not follow a page's scroll, which is why the picker says so in words.
 
-**B. Pick on screen (precision).** `Pick on screen` opens a full-screen activity where the nine zones
-cover the **real** display edge to edge:
+**B. The picker (precision).** Either entry opens the same full-screen activity, already in its
+mode, where the nine zones (or the exact-point layer) cover the **real** display edge to edge:
 
 | Element | Spec |
 |---|---|
 | Zones | The real usable area, `2 dp` inset, nine thirds, light scrim `#99101618` over the app beneath so the target app stays readable |
 | Labels | `headlineSmall` numbers; the selected zone keeps its number *under* the crosshair so it is never a blank block |
-| Hint bar | Top-centre, `RoundedCornerShape(14.dp)`, `#E6101A1C`. **One** 30 dp row: chips `Cell` / `Exact` on the left, `Cancel` on the right, and a single-line hint underneath that retires after 2.6 s — leaving a 42 dp bar. Two lines of prose that never left were rejected: they covered the top of the screen, which is exactly where people aim |
+| Chrome | **One line of text and nothing else**: `Tap a third of the screen · Back to cancel` (cell) or `Tap the exact spot · Back to cancel` (exact), bottom-centre, no panel, no button, no pointer handler of its own — so the tap it explains still reaches the layer underneath. Any bar, however thin, was rejected: it sits on the screen the user is trying to see |
 | Selection (Cell) | Tapping a zone writes the cell index and closes the activity immediately |
-| Exact mode | The third lines stay as faint guides, a crosshair follows the finger, and releasing commits the touch point as a fraction of the same usable area. Hint text switches to `Tap the exact spot to press` / `A fixed screen position · it does not follow page scrolling` |
-| Mode switch | Explicit, and it opens on whatever mode is live. No snapping: "near a centre means the cell" would silently rewrite a deliberate pixel the user could neither see nor undo |
-| Why top | A bottom bar would cover cells 7–9 and swallow the taps it is asking for |
+| Exact mode | The third lines stay as faint guides, the stored spot is ringed faintly, a bright crosshair follows the finger, and releasing commits the touch point as a fraction of the same usable area |
+| Mode switch | **Absent inside the picker** — it was chosen by the button that opened it. No snapping either: "near a centre means the cell" would silently rewrite a deliberate pixel the user could neither see nor undo |
+| Leaving | System Back. The tip says so in the same line it uses to explain the aim, which is why no `Cancel` button is needed |
 
 Cell mode stores only the **cell index**; exact mode stores a **fraction**, never a raw pixel — so
 both survive rotation. The committed touch is mapped with the window's own location on screen, so a
@@ -236,7 +240,7 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | 2 | **Status** | State dot + one of `Tapping` / `Paused` / `Finished` / `Needs attention` / `Idle`; right side `Every 3s`; **no detail paragraph** — the word and the button already say everything, and a failure sentence appears only on error; the primary **Start tapping / Stop tapping** button (52 dp, full width) |
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
-| 5 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Pick on screen`; in exact mode a pin instead of a highlight, `Exact spot` + `52% · 38%`, `Pick another spot`, `Back to grid centres` |
+| 5 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Its centre is pressed.`, then `Pick a cell` / `Pick exact spot`; in exact mode a pin instead of a highlight and `Exact spot` + `65% · 34% from the top-left of the screen` |
 | 6 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 100 / 500 / 1000` and one explanatory line |
 | 7 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |
 | 8 | **Before you start** *(when complete)* | The same card, now collapsed to `All set`, at the bottom of the page |
@@ -462,7 +466,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 - `Optional` · `Display over other apps` · `Accessibility: AutoClick taps` · `Notifications` · `Battery: unrestricted`
 - `Shows the floating hand.` · `Sends the taps.` · `Status line with a Stop button.` · `Keeps the service alive.`
 - `Greyed out? App info › Allow restricted settings.`
-- `Where to tap` · `One cell of a 3x3 grid; the tap lands in its centre.` / `One fixed spot on the screen.` · `Pick on screen` · `Pick another spot` · `Back to grid centres` · `Exact spot` · `52% · 38%`
+- `Where to tap` · `A cell centre, or any spot you point at.` · `Pick a cell` · `Pick exact spot` · `Exact spot` · `65% · 34% from the top-left of the screen`
 - `Interval` · `Seconds to wait between two taps.` · `Seconds` · `Apply` · `1–3600 s` · `1s 2s 5s 10s 30s 60s`
 - `Stop after` · `Never` · `100` · `500` · `1000` · `Runs until you stop it.` · `Stops by itself after 500 taps.`
 - `Advanced` · `Feedback while it runs. Both on by default.` · `All on` / `Some off`
@@ -480,8 +484,8 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 
 **Picker**
 
-- `Tap a third of the screen to press its centre` · `Tap the exact spot to press — a fixed screen position`
-- `Cell` · `Exact` · `Cancel` — and nothing else: the chip row is the only chrome that stays
+- `Tap a third of the screen · Back to cancel` · `Tap the exact spot · Back to cancel`
+- nothing else — no chips, no bar, no background: the picker is the screen
 
 **System surfaces**
 

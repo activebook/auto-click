@@ -155,10 +155,9 @@ class MainActivity : ComponentActivity() {
                             checked = enabled,
                         )
                     },
-                    onPickOnScreen = {
-                        startActivity(Intent(this@MainActivity, GridPickerActivity::class.java))
+                    onPickTarget = { mode ->
+                        startActivity(GridPickerActivity.intent(this@MainActivity, mode))
                     },
-                    onUseGridTarget = { applyConfig(targetMode = TargetMode.CELL) },
                 )
             }
         }

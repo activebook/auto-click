@@ -1,5 +1,7 @@
 package com.activebook.autoclick.app.ui.grid
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,15 +22,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,19 +34,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.activebook.autoclick.app.AutoClickApplication
-import com.activebook.autoclick.app.domain.geometry.GridGeometry
 import com.activebook.autoclick.app.domain.geometry.RelativePoint
 import com.activebook.autoclick.app.domain.geometry.ScreenPoint
 import com.activebook.autoclick.app.domain.geometry.ScreenRect
@@ -56,12 +51,11 @@ import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.domain.model.TargetMode
 import com.activebook.autoclick.app.ui.components.NineGrid
 import com.activebook.autoclick.app.ui.theme.AutoClickTheme
-import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
+import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.launch
 
 /**
- * Full-screen picker with two modes, both writing to the same place:
+ * Full-screen picker for one mode at a time, both writing to the same place:
  *
  * - **Cell** — the nine zones tile the *real* display (bars and cutout excluded), so the zone
  *   tapped here is exactly the zone the engine will press. Only the index is derived, so the
@@ -69,9 +63,10 @@ import kotlinx.coroutines.launch
  * - **Exact** — the touch point itself becomes the target, stored as a fraction of that same
  *   display area. This is the only way to aim at a spot that is not a cell centre.
  *
- * The mode switch is explicit. Snapping "near a centre means the cell" was rejected: it would
- * silently rewrite a deliberate pixel into a cell centre, and the user could neither see it
- * happening nor undo it.
+ * The mode is chosen *before* entering, by which button the user pressed on the app's target card:
+ * a switch inside the picker competed with the thing the picker is for. Snapping "near a centre
+ * means the cell" was rejected too: it would silently rewrite a deliberate pixel into a cell
+ * centre, and the user could neither see it happening nor undo it.
  */
 class GridPickerActivity : ComponentActivity() {
 
@@ -80,11 +75,16 @@ class GridPickerActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val container = (application as AutoClickApplication).container
+        // An unknown or absent extra falls back to the live config, so an old caller that only
+        // knows "open the picker" still lands somewhere sensible.
+        val mode = runCatching { TargetMode.valueOf(intent.getStringExtra(EXTRA_MODE).orEmpty()) }
+            .getOrDefault(container.config.value.targetMode)
 
         setContent {
             val config by container.config.collectAsStateWithLifecycle()
             AutoClickTheme {
                 GridPickerScreen(
+                    mode = mode,
                     config = config,
                     areaProvider = { container.displayProvider.usableArea() },
                     onPickCell = { index ->
@@ -93,7 +93,6 @@ class GridPickerActivity : ComponentActivity() {
                     onPickPoint = { point ->
                         save(config, TargetMode.POINT, config.cellIndex, point)
                     },
-                    onDismiss = { finish() },
                 )
             }
         }
@@ -122,18 +121,24 @@ class GridPickerActivity : ComponentActivity() {
     }
 
     private fun container() = (application as AutoClickApplication).container
+
+    companion object {
+        private const val EXTRA_MODE = "mode"
+
+        fun intent(context: Context, mode: TargetMode): Intent =
+            Intent(context, GridPickerActivity::class.java).putExtra(EXTRA_MODE, mode.name)
+    }
 }
 
 @Composable
 private fun GridPickerScreen(
+    mode: TargetMode,
     config: ClickerConfig,
     areaProvider: () -> ScreenRect,
     onPickCell: (Int) -> Unit,
     onPickPoint: (RelativePoint) -> Unit,
-    onDismiss: () -> Unit,
 ) {
-    var mode by rememberSaveable { mutableStateOf(config.targetMode) }
-    var marker by remember { mutableStateOf<Offset?>(null) }
+    var liveMarker by remember { mutableStateOf<Offset?>(null) }
 
     Box(
         modifier = Modifier
@@ -156,30 +161,33 @@ private fun GridPickerScreen(
         } else {
             ExactSpotLayer(
                 areaProvider = areaProvider,
-                marker = marker,
-                onPress = { marker = it },
+                existing = config.point,
+                marker = liveMarker,
+                onPress = { liveMarker = it },
                 onPick = onPickPoint,
             )
         }
 
-        // Chrome lives at the top on purpose: a floating bar at the bottom would sit on top of
-        // cells 7-9 and swallow taps. Only the switch and the button have pointer handlers, so
-        // the rest of the hint bar lets taps fall through to the layer underneath.
-        PickerBar(
-            mode = mode,
-            modifier = Modifier.align(Alignment.TopCenter),
-            onModeChange = { newMode ->
-                mode = newMode
-                marker = null
+        // The only chrome left. No background, no pointer handler of its own, one line: it explains
+        // the mode and still lets the tap it is explaining reach the layer underneath. Back is the
+        // way out, so a Cancel button would be another control competing with the aim.
+        TipLine(
+            text = if (mode == TargetMode.CELL) {
+                "Tap a third of the screen \u00b7 Back to cancel"
+            } else {
+                "Tap the exact spot \u00b7 Back to cancel"
             },
-            onDismiss = onDismiss,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(bottom = 18.dp, start = 24.dp, end = 24.dp),
         )
     }
 }
 
 /**
- * The exact mode: thirds drawn faintly for orientation, a crosshair following the finger, and the
- * touch point committed on release.
+ * The exact mode: thirds drawn faintly for orientation, the stored spot marked, a crosshair
+ * following the finger, and the touch point committed on release.
  *
  * The committed value is the touch position *plus* the window's location on screen, then mapped
  * through the same [ScreenRect] the engine uses. Skipping the window offset would put the target
@@ -189,6 +197,7 @@ private fun GridPickerScreen(
 @Composable
 private fun ExactSpotLayer(
     areaProvider: () -> ScreenRect,
+    existing: RelativePoint,
     marker: Offset?,
     onPress: (Offset) -> Unit,
     onPick: (RelativePoint) -> Unit,
@@ -242,6 +251,16 @@ private fun ExactSpotLayer(
                 )
             }
 
+            // What is stored now, faint, so "another spot" can be judged against it.
+            val stored = Offset(left + width * existing.x, top + height * existing.y)
+            drawCircle(
+                color = Color(0x668FE3D8),
+                radius = 15.dp.toPx(),
+                center = stored,
+                style = Stroke(2.dp.toPx()),
+            )
+            drawCircle(color = Color(0x668FE3D8), radius = 3.dp.toPx(), center = stored)
+
             marker?.let { point ->
                 drawCircle(
                     color = Color(0xFF8FE3D8),
@@ -256,96 +275,16 @@ private fun ExactSpotLayer(
 }
 
 @Composable
-private fun PickerBar(
-    mode: TargetMode,
-    modifier: Modifier = Modifier,
-    onModeChange: (TargetMode) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    // The bar is chrome over the thing the user is aiming at, so it earns its height: one compact
-    // row that never leaves, and a one-line hint that retires after 2.6 s. The previous version
-    // kept two lines of prose on screen forever and covered the top third of the display — which
-    // is exactly where people aim when they want to tap a search field or a menu.
-    var showHint by remember(mode) { mutableStateOf(true) }
-    LaunchedEffect(mode) {
-        showHint = true
-        delay(HINT_VISIBLE_MS)
-        showHint = false
-    }
-
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = Color(0xE6101A1C),
-        modifier = modifier
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(top = 6.dp, start = 10.dp, end = 10.dp),
-    ) {
-        Column(modifier = Modifier.padding(start = 8.dp, top = 6.dp, bottom = 6.dp, end = 4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ModeChip("Cell", selected = mode == TargetMode.CELL) {
-                    onModeChange(TargetMode.CELL)
-                }
-                Spacer(modifier = Modifier.width(6.dp))
-                ModeChip("Exact", selected = mode == TargetMode.POINT) {
-                    onModeChange(TargetMode.POINT)
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                BarButton("Cancel", onClick = onDismiss)
-            }
-
-            if (showHint) {
-                Text(
-                    text = if (mode == TargetMode.CELL) {
-                        "Tap a third of the screen to press its centre"
-                    } else {
-                        "Tap the exact spot to press \u2014 a fixed screen position"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xCCFFFFFF),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp, start = 3.dp),
-                )
-            }
-        }
-    }
+private fun TipLine(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge.copy(
+            textAlign = TextAlign.Center,
+            // A shadow instead of a panel: legible over any app, yet nothing solid sits over the
+            // screen the user is about to press.
+            shadow = Shadow(color = Color(0xCC000000), offset = Offset(0f, 1f), blurRadius = 6f),
+        ),
+        color = Color(0xF2FFFFFF),
+        modifier = modifier,
+    )
 }
-
-/** 30 dp tall on purpose: a Material `TextButton` would drag the row to 48 dp. */
-@Composable
-private fun ModeChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    val background = if (selected) Color(0xFF2B4A48) else Color(0x33FFFFFF)
-    val content = if (selected) Color(0xFF8FE3D8) else Color(0xCCFFFFFF)
-    Box(
-        modifier = Modifier
-            .height(30.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(background)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp)
-            .semantics { contentDescription = text + " mode" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = text, style = MaterialTheme.typography.labelMedium, color = content)
-    }
-}
-
-@Composable
-private fun BarButton(text: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .height(30.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = text, style = MaterialTheme.typography.labelMedium, color = Color(0xCCFFFFFF))
-    }
-}
-
-/** Long enough to read one line, short enough that the bar stops hiding the screen. */
-private const val HINT_VISIBLE_MS = 2_600L
-
-private fun percent(fraction: Float): String = (fraction * 100f).roundToInt().toString() + "%"
