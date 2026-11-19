@@ -71,8 +71,8 @@ private val SystemTrack = Color(0xFFD9D9D9)
 
 private val INTERVAL_PRESETS = listOf(1, 2, 5, 10, 30, 60)
 
-/** Off, then three round numbers. A budget is a "set it and forget it" value, not a slider. */
-private val TAP_BUDGET_PRESETS = listOf(0, 100, 500, 1000)
+/** Never, then a short ladder of common budgets. Anything else goes in the custom field. */
+private val TAP_BUDGET_PRESETS = listOf(0, 1, 3, 5, 10, 100)
 
 @Composable
 fun MainScreen(
@@ -596,6 +596,12 @@ private fun IntervalCard(
     val valid = parsed != null &&
         parsed in ClickerConfig.MIN_INTERVAL_SECONDS..ClickerConfig.MAX_INTERVAL_SECONDS
 
+    // The budget gets the same chips-plus-custom treatment as the interval: 0 means "never".
+    var budgetText by remember(config.stopAfterTaps) { mutableStateOf(config.stopAfterTaps.toString()) }
+    val budgetParsed = budgetText.toIntOrNull()
+    val budgetValid = budgetParsed != null &&
+        budgetParsed in ClickerConfig.NO_TAP_BUDGET..ClickerConfig.MAX_STOP_AFTER_TAPS
+
     SectionCard(
         title = "Interval",
         subtitle = "Seconds to wait between two taps.",
@@ -683,6 +689,34 @@ private fun IntervalCard(
                 )
             }
         }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = budgetText,
+                onValueChange = { value ->
+                    budgetText = value.filter(Char::isDigit).take(6)
+                },
+                label = { Text("Taps") },
+                singleLine = true,
+                isError = budgetText.isNotEmpty() && !budgetValid,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.width(150.dp),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            TextButton(
+                onClick = { budgetParsed?.let(onStopAfterTaps) },
+                enabled = budgetValid && budgetParsed != config.stopAfterTaps,
+            ) {
+                Text("Apply")
+            }
+        }
+
+        Text(
+            text = "0–${ClickerConfig.MAX_STOP_AFTER_TAPS} taps · 0 = never",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
         Text(
             text = if (config.stopAfterTaps == ClickerConfig.NO_TAP_BUDGET) {
                 "Runs until you stop it."
