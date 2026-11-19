@@ -1,6 +1,6 @@
 # AutoClick — Technical Reference
 
-**Version 1.2.0** · `com.activebook.autoclick.app` · `minSdk 26` / `targetSdk 36` / `compileSdk 36`
+**Version 1.6.6** · `com.activebook.autoclick.app` · `minSdk 26` / `targetSdk 36` / `compileSdk 36`
 
 Everything an engineer needs to build, change, or debug this app: stack, architecture, the timing
 engine, the overlay windows, permission plumbing, persistence, build and verification.
@@ -21,7 +21,7 @@ every approach that was measured and rejected — is in [`PLAN.md`](PLAN.md).
 | minSdk | **26** | Floor for `TYPE_APPLICATION_OVERLAY` and for a modern `dispatchGesture` baseline |
 | UI | Jetpack Compose, **BOM 2025.06.01**, Material 3 | One design system for activities *and* overlay windows |
 | core-ktx / activity-compose / lifecycle | **1.16.0** / **1.10.1** / **2.9.1** | Pinned to the resolvable set (see AGP row) |
-| DataStore (preferences) | **1.1.7** | Seven scalar keys; no DB needed |
+| DataStore (preferences) | **1.1.7** | Eleven scalar keys; no DB needed |
 | Coroutines | **1.10.2** | `StateFlow` + `Flow` plumbing |
 | Tests | JUnit 4.13.2, `kotlinx-coroutines-test` | Domain is pure Kotlin, so no Robolectric on the gate |
 | DI | Manual `AppContainer` | Five collaborators; Hilt's annotation processing is not worth it |
@@ -39,19 +39,19 @@ Toolchain: JDK 17+ (verified with Temurin 21), Android SDK platform 36, `build-t
 
 ```
 MainActivity ─┐
-              ├── AppContainer (process-wide singletons, manual DI)
+              ├── AppContainer (process-wide singletons, manual DI, persistence writes)
 OverlayService┘        │
-   │                   ├── ClickerConfigRepository   DataStore: cell, interval, toggles, bubble x/y
-   ├── OverlayController ── WindowManager: hand / panel / crosshair (Compose + one Canvas View)
+   │                   ├── ClickerConfigRepository   DataStore: target, interval, budget, toggles, bubble x/y, hand_visible
+   ├── OverlayController ── WindowManager: hand / panel / crosshair / hide popover (Compose + one Canvas View)
    │
 AutoClickAccessibilityService ── AccessibilityClickSink ── dispatchGesture()
                                        │
                               ClickerCoordinator   the only component that decides *when* to tap
 ```
 
-One process, zero IPC. The three ports the engine needs — `Ticker`, `ClickSink`,
-`DisplayProvider` — plus `OverlayGuard` are injected, so the whole engine runs under JVM unit tests
-with fakes.
+One process, zero IPC. The three ports the engine needs — `Ticker` (`HandlerTicker`), `ClickSink`
+(`AccessibilityClickSink`), `DisplayProvider` (`AndroidDisplayProvider`) — plus `OverlayGuard` are
+injected, so the whole engine runs under JVM unit tests with fakes.
 
 ```mermaid
 flowchart TD
@@ -70,18 +70,18 @@ flowchart TD
 ```
 com.activebook.autoclick.app
 ├── domain/        pure Kotlin, no android.* except value types
-│   ├── model/     ClickerConfig, ClickerState, TapOutcome, FailureReason
-│   ├── geometry/  GridGeometry (cell → centre), ScreenPoint/ScreenRect
+│   ├── model/     ClickerConfig, ClickerState, TapOutcome, FailureReason, TapTarget, TargetMode
+│   ├── geometry/  GridGeometry (cell → centre), RelativePoint (fraction → pixel), ScreenPoint/ScreenRect
 │   └── timing/    IntervalMath (anchor + rebase policy)
 ├── core/          Contracts (Ticker/ClickSink/DisplayProvider/OverlayGuard), ClickerCoordinator
 ├── data/          ClickerConfigRepository
-├── platform/      Permissions (detection + intents)
+├── platform/      AndroidDisplayProvider, HandlerTicker, Permissions (detection + intents)
 ├── service/
 │   ├── accessibility/  AutoClickAccessibilityService, AccessibilityClickSink
 │   ├── overlay/        OverlayController, OverlayLifecycleOwner, CrosshairView
 │   └── OverlayService.kt
 ├── ui/            MainActivity, MainScreen, PermissionSnapshot, FailureMessages, theme, components
-│   ├── overlay/   OverlayContent (BubbleContent, PanelContent, SettingsPanel, PanelMode)
+│   ├── overlay/   OverlayContent (BubbleContent, HidePopover, PanelContent, SettingsPanel, PanelMode)
 │   └── grid/      GridPickerActivity
 └── AppContainer.kt, AutoClickApplication.kt
 ```
@@ -99,6 +99,7 @@ in `domain/` and is unit-tested without a device.
 sealed interface ClickerState {
     data object Idle
     data class Running(paused: Boolean, tapCount: Long, skippedTicks: Long, …)
+    data class Finished(tapCount: Long, skippedTicks: Long)
     data class Error(reason: FailureReason)
 }
 ```
@@ -135,11 +136,14 @@ enough to be a tap, short enough not to read as a long-press.
 
 ### 3.3 Geometry
 
-`GridGeometry.cellCenter(index, usableArea)`: thirds of the usable area, centre of the chosen third.
+`TapTarget.resolveIn(usableArea)` resolves both targeting modes against the live usable area:
+- `TargetMode.CELL`: `GridGeometry.cellCenter(index, usableArea)` — thirds of the usable area, centre of the chosen third.
+- `TargetMode.POINT`: `RelativePoint.resolveIn(usableArea)` — normalized `0..1` fractions mapped onto the usable area.
+
 The area is `display bounds − system bar insets`, read from `WindowManager.maximumWindowMetrics`
 (API 30+) with `getRealMetrics` as the pre-30 fallback. Coordinates are recomputed **at fire time**;
-only `cellIndex` is ever persisted, so rotation, split-screen and resolution changes are correct for
-free.
+only `cellIndex` and normalized `RelativePoint` fractions are ever persisted, so rotation,
+split-screen and resolution changes are correct for free.
 
 `OverlayGuard`: the controller keeps cached `getLocationOnScreen()` bounds for the hand and the
 panel, refreshed on a frame callback, so the ticker can ask "does my own window cover the target?"
@@ -244,7 +248,7 @@ density) resizes the window *downward from a fixed `y`* unless the anchor is rec
 | Trigger | Implementation |
 |---|---|
 | Any measured height change | `View.OnLayoutChangeListener` on the panel view → `refinePanelPosition()` + `updateBoundsNow()`. This is the only signal ordered *after* Compose measure |
-| Placement | `computePanelPosition()` uses the **measured** height when present; the 108 dp estimate is used only before the first measure |
+| Placement | `computePanelPosition()` uses the **measured** height when present; the 56 dp estimate is used only before the first measure |
 | Drag in flight | throttled `refreshPanelPlacement()` (48 ms) |
 | Edge-snap end | `refreshPanelPlacement()` + `refinePanelPosition()` after committing the new `x` |
 | Mode swap | Explicitly **does not** reposition — one owner for the anchor, the listener |
@@ -263,26 +267,31 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
 
 | Action | Effect |
 |---|---|
-| `ACTION_START` | Attach the bubble if permission allows, refresh guard bounds, `coordinator.start()` |
+| `ACTION_START` | Persist `hand_visible = true` via `AppContainer`, attach the bubble, refresh guard bounds, `coordinator.start()` |
 | `ACTION_STOP` | `coordinator.stop()` |
-| `ACTION_SHOW` / `ACTION_HIDE` | Attach / release the bubble; `SHOW` without overlay permission calls `stopSelf()` rather than claiming a hand it cannot draw |
-| `null` (system restart) | Re-attach the bubble if the permission is held |
+| `ACTION_SHOW` | Attach the bubble if permission allows; without overlay permission calls `stopSelf()` rather than claiming a hand it cannot draw |
+| `ACTION_HIDE` | Detach the bubble, stop the run, persist `hand_visible = false` via `AppContainer`, `stopSelf()` |
+| `ACTION_DETACH` | Detach the bubble, stop the run, and `stopSelf()` **without** modifying `hand_visible` (used when overlay permission is lost or revoked) |
+| `null` (system restart) | Re-read `hand_visible` from DataStore and re-attach the bubble if permitted and enabled; otherwise `stopSelf()` |
 
-- Notification: channel `autoclick_status` (low importance), id `4711`, one contextual action
-  (`Stop`/`Start`, `REQUEST_TOGGLE = 10`), content intent `REQUEST_OPEN = 11`.
-- **Headless mode**: with Accessibility granted but overlay not, the service runs the loop and the
-  notification and simply has no bubble. This is what makes "Start" honest when only one of the two
-  permissions is on.
+- Notification: channel `autoclick_status` (low importance), id `4711`, two actions
+  (`Stop`/`Start` via `REQUEST_TOGGLE = 10`, and `Hide hand` via `REQUEST_HIDE = 12`), content intent `REQUEST_OPEN = 11`.
+- **No silent headless loop**: hiding the hand stops any active run, and `MainScreen` keeps Start
+  disabled until both Accessibility and Display over other apps are granted (ADR-021). If overlay
+  permission is missing during a service start, the service updates notification status honestly and
+  refrains from claiming a bubble.
 - **Screen policy**: a receiver for `ACTION_SCREEN_OFF` → `coordinator.pause()`, `ACTION_USER_PRESENT`
-  → `resume()`. No wakelock, so a locked phone never taps and never drains.
-- Bubble lifecycle is a runtime attach/detach (`attachBubble()` is idempotent, `releaseBubble()`), because
-  the bubble's existence is decided by the permission, not by a stored preference.
+  → `resume()`, and `ACTION_SCREEN_ON` → `resume()` when `KeyguardManager.isKeyguardLocked == false`
+  (covering devices with Screen Lock = None). No wakelock, so a locked phone never taps and never drains.
+- Bubble lifecycle is a runtime attach/detach (`attachBubble()` is idempotent, `releaseBubble()`), gated
+  by overlay permission AND the persisted `hand_visible` preference (ADR-021), with process-scoped
+  DataStore writes via `AppContainer` so `stopSelf()` never cancels an in-flight write.
 
 ---
 
 ## 7. Persistence
 
-`ClickerConfigRepository` over DataStore Preferences — ten keys, all scalar:
+`ClickerConfigRepository` over DataStore Preferences — eleven scalar keys:
 
 | Key | Type | Default |
 |---|---|---|
@@ -313,11 +322,12 @@ position, the activity writes config, both through the same repository instance.
 |---|---|
 | Overlay | `Settings.canDrawOverlays(context)` |
 | Accessibility | `ACCESSIBILITY_ENABLED == 1` in `Settings.Secure`, and `ENABLED_ACCESSIBILITY_SERVICES` contains our `package/class` component |
-| Notifications | `NotificationManagerCompat.areNotificationsEnabled()` (33+: runtime grant) |
+| Notifications | `NotificationManagerCompat.from(context).areNotificationsEnabled()` |
 | Battery | `PowerManager.isIgnoringBatteryOptimizations(package)` |
 
-`PermissionSnapshot` re-reads all four every second while the app is in the foreground, so returning
-from a system screen updates rows, badge and card position without a manual refresh.
+`PermissionSnapshot` re-reads all four every second while the activity is in the `STARTED` lifecycle
+state (`repeatOnLifecycle(Lifecycle.State.STARTED)`), so returning from a system screen updates rows,
+badge and card position immediately without polling in the background.
 
 ### 8.1 Opening the accessibility screen **on our row**
 
@@ -374,13 +384,13 @@ the whole hand-off.
 ## 9. Build, versioning, artifacts
 
 ```bash
-./gradlew :app:testDebugUnitTest   # 56 tests
+./gradlew :app:testDebugUnitTest   # 60 tests
 ./gradlew :app:lintDebug           # 0 errors
 ./gradlew :app:assembleDebug       # debug APK  (+ refresh dist/AutoClick-<version>-debug.apk)
 ./gradlew :app:assembleRelease     # R8 release  (+ refresh dist/AutoClick-<version>.apk)
 ```
 
-- `versionCode = 12`, `versionName = "1.6.5"`. A name bump without a code bump is refused by the
+- `versionCode = 13`, `versionName = "1.6.6"`. A name bump without a code bump is refused by the
   project's own invariant.
 - Gradle's artifact keeps AGP's canonical name `app-<variant>.apk` because Studio's Run,
   `installDebug` and most CI scripts resolve exactly that path; renaming inside `build/` is only
@@ -402,8 +412,8 @@ the whole hand-off.
 
 | Gate | Result |
 |---|---|
-| `:app:testDebugUnitTest` | **56 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest` |
-| `:app:lintDebug` | **0 errors, 0 hints**; 14 warnings — dependency-version notices and the battery-exemption policy note |
+| `:app:testDebugUnitTest` | **60 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest` |
+| `:app:lintDebug` | **0 errors, 0 code warnings**; 13 dependency-version notices |
 
 What the unit tests actually pin: cell centres sit at 1/6, 3/6, 5/6 of the usable area; insets
 and degenerate areas produce no NaN; 1000 ticks at a fixed interval equal `anchor + n·interval`;
@@ -452,8 +462,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 001 | Taps via `AccessibilityService.dispatchGesture`, never root/adb/reflection | Accepted |
 | 002 | One FGS + one AccessibilityService + process-singleton coordinator; single process | Accepted |
 | 003 | Compose for app *and* overlay, hosted by `ComposeView` + `OverlayLifecycleOwner` | Accepted |
-| 004 | DataStore Preferences for scalar keys (seven in 1.3.0, ten in 1.4.0) | Accepted |
-| 019 | Tap budget counted in delivered taps, surfaced as its own `Finished` state | Accepted — `Idle` would make a completed run look like a never-started one |
+| 004 | DataStore Preferences for scalar keys (seven in 1.3.0, ten in 1.4.0, eleven in 1.6.2) | Accepted |
 | 005 | Store a cell index, resolve pixels at fire time from current metrics | Accepted |
 | 006 | Anchored `HandlerThread` scheduling, rebase on over-long stalls, no `AlarmManager` | Accepted |
 | 007 | Never swallow own taps — **replaced**: refuse at start, skip at runtime (no window-flag dance) | Superseded by PLAN §15.2 |
@@ -463,11 +472,12 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | 011 | Nine-grid in the app is a 132 dp indicator; aiming happens in a full-screen picker | Accepted |
 | 012 | Accessibility list opened with `:settings:fragment_args_key` + Bundle copy | Accepted |
 | 013 | `dist/AutoClick-<version>.apk` naming, canonical Gradle artifact untouched | Accepted |
-| 014 | The tap loop must not depend on the bubble (headless mode) | Accepted |
+| 014 | The tap loop must not depend on the bubble (headless mode) | **Superseded by 021** — hiding stops the run so tapping never proceeds unseen |
 | 015 | A permission switch is a remote control for its system screen, never a fake toggle | Accepted |
 | 016 | The hand's existence is the overlay permission, not a preference | **Amended by 021** — visibility is now permission AND a user preference |
 | 017 | Hand-off notice as an overlay window | **Superseded** — force-hidden on that screen |
 | 018 | Hand-off notice as two text Toasts | Accepted |
+| 019 | Tap budget counted in delivered taps, surfaced as its own `Finished` state | Accepted — `Idle` would make a completed run look like a never-started one |
 | 020 | Countdown ring driven by delivered-tap events (`tapEvents`), not a separate timer | Accepted — a second timer would drift out of step with the real taps |
 | 021 | Hand visibility = overlay permission AND persisted `hand_visible`; hiding stops the run (no headless); Start re-shows; re-show lives in the settings page | Accepted — a tap loop the user cannot see or stop would be a trap |
 | 022 | Hide entry is a long-press popover (eye-off card + full-screen scrim), not a panel row; while open the guard skips all ticks | Accepted — one gesture instead of three taps; the scrim must not swallow dispatched taps |
@@ -495,9 +505,9 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 ```
 auto-click/
 ├─ app/src/main/java/com/activebook/autoclick/app/   domain / core / data / platform / service / ui
-├─ app/src/test/java/...                             6 test classes, 56 JVM tests
+├─ app/src/test/java/...                             6 test classes, 60 JVM tests
 ├─ app/src/main/res/                                 strings (English), themes, icons, XML configs
-├─ dist/                                             AutoClick-1.2.0.apk and -debug.apk (copies)
+├─ dist/                                             AutoClick-1.6.6.apk (tracked release copy; -debug.apk is git-ignored)
 ├─ docs/DESIGN.md                                    product + interaction design
 ├─ docs/TECH.md                                      this file
 ├─ docs/PLAN.md                                      requirements, ADRs, round-by-round history

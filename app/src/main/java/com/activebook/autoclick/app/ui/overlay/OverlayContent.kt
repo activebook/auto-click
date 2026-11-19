@@ -174,6 +174,7 @@ fun BubbleContent(
                     }
 
                     MotionEvent.ACTION_MOVE -> {
+                        if (gesture.longPressFired) return@pointerInteropFilter true
                         if (!gesture.dragging &&
                             (abs(event.rawX - gesture.downX) > touchSlop ||
                                 abs(event.rawY - gesture.downY) > touchSlop)
@@ -211,6 +212,7 @@ fun BubbleContent(
             }
             .semantics {
                 contentDescription = when {
+                    paused -> "AutoClick is paused. Tap to open controls."
                     running -> "AutoClick is tapping. Tap to open controls."
                     finished -> "AutoClick finished its tap budget. Tap to open controls."
                     else -> "AutoClick is idle. Tap to open controls."
@@ -287,7 +289,6 @@ fun BubbleContent(
 /** What the expanded overlay panel is currently showing. */
 enum class PanelMode { CONTROLS, SETTINGS }
 
-/** Expanded control surface: start/stop, settings, collapse. Nothing else — the buttons say the rest. */
 /**
  * The long-press hide popover: a single eye-off button in a small card. Tapping it hides the hand
  * and stops the run; the full-screen scrim behind it dismisses on any other tap.
@@ -314,6 +315,7 @@ fun HidePopover(onHide: () -> Unit) {
     }
 }
 
+/** Expanded control surface: start/stop, settings, collapse. Nothing else — the buttons say the rest. */
 @Composable
 fun PanelContent(
     mode: PanelMode,

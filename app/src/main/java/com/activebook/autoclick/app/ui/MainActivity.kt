@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Build
-import android.os.SystemClock
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,8 +17,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.activebook.autoclick.app.AppContainer
 import com.activebook.autoclick.app.AutoClickApplication
 import com.activebook.autoclick.app.domain.model.ClickerConfig
@@ -28,11 +31,10 @@ import com.activebook.autoclick.app.service.OverlayService
 import com.activebook.autoclick.app.ui.grid.GridPickerActivity
 import com.activebook.autoclick.app.ui.theme.AutoClickTheme
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private val handoffHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val handoffHandler = Handler(Looper.getMainLooper())
     private var handoffActive = false
 
     /** Set when the accessibility deep link is about to open; consumed in [onStop]. */
@@ -40,7 +42,14 @@ class MainActivity : ComponentActivity() {
     private var pendingHintDeadline = 0L
 
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
+            ) {
+                launchSafely(Permissions.notificationSettingsIntent(this), checked = true)
+            }
+        }
 
     private val container: AppContainer
         get() = (application as AutoClickApplication).container
@@ -52,15 +61,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             val config by container.config.collectAsStateWithLifecycle()
             val clickerState by container.coordinator.state.collectAsStateWithLifecycle()
-            val overlayVisible by OverlayService.isOverlayVisible.collectAsStateWithLifecycle()
             val handVisible by container.handVisible.collectAsStateWithLifecycle()
 
             val permissions by produceState(
                 initialValue = PermissionSnapshot.current(this@MainActivity),
             ) {
-                while (true) {
-                    value = PermissionSnapshot.current(this@MainActivity)
-                    delay(1_000)
+                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (true) {
+                        value = PermissionSnapshot.current(this@MainActivity)
+                        delay(1_000)
+                    }
                 }
             }
 
@@ -81,15 +91,15 @@ class MainActivity : ComponentActivity() {
             }
 
             // The hand follows the overlay permission AND the user's visibility preference
-            // (ADR-021 amends ADR-016). Both directions are idempotent: requestShow attaches the
-            // window only if missing; requestHide tears it down and stops the session it can no
-            // longer guard. When the user has hidden the hand we leave it hidden until they turn
-            // it back on here (or press Start, which re-shows it).
+            // (ADR-021 amends ADR-016). Wait for DataStore to emit before acting so cold-start
+            // never clobbers a stored `false`. Requesting detach when permission goes away stops
+            // the service without overwriting the stored preference.
             LaunchedEffect(permissions.overlay, handVisible) {
-                if (permissions.overlay && handVisible) {
+                val visible = handVisible ?: return@LaunchedEffect
+                if (permissions.overlay && visible) {
                     OverlayService.requestShow(this@MainActivity)
                 } else if (OverlayService.isOverlayVisible.value) {
-                    OverlayService.requestHide(this@MainActivity)
+                    OverlayService.requestDetach(this@MainActivity)
                 }
             }
 
@@ -99,9 +109,9 @@ class MainActivity : ComponentActivity() {
                     state = clickerState,
                     permissions = permissions,
                     onStart = {
-                        // Accessibility alone is enough to tap. Without the overlay permission
-                        // the service runs headless: same loop, no bubble.
-                        if (permissions.accessibility) {
+                        // Start requires both Accessibility (to inject taps) and Display over
+                        // other apps (so a visible floating hand is always available to stop it).
+                        if (permissions.accessibility && permissions.overlay) {
                             OverlayService.requestStart(this@MainActivity)
                         }
                     },
@@ -115,10 +125,8 @@ class MainActivity : ComponentActivity() {
                     onStopAfterTaps = { taps -> applyConfig(stopAfterTaps = taps) },
                     onHaptics = { enabled -> applyConfig(haptic = enabled) },
                     onFlash = { enabled -> applyConfig(flash = enabled) },
-                    handVisible = handVisible,
-                    onToggleHand = { enabled ->
-                        lifecycleScope.launch { container.repository.setHandVisible(enabled) }
-                    },
+                    handVisible = handVisible ?: true,
+                    onToggleHand = { enabled -> container.setHandVisible(enabled) },
                     onOpenAccessibility = ::openAccessibility,
                     onEnableOverlay = ::openOverlay,
                     // A switch cannot grant anything itself, so it opens the screen that owns the
@@ -126,16 +134,14 @@ class MainActivity : ComponentActivity() {
                     onToggleOverlay = { openOverlay() },
                     onToggleAccessibility = { openAccessibility() },
                     onToggleNotifications = { enabled ->
-                        if (enabled) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notificationPermissionLauncher.launch(
-                                    Manifest.permission.POST_NOTIFICATIONS,
-                                )
-                            }
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notificationPermissionLauncher.launch(
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            )
                         } else {
                             launchSafely(
                                 Permissions.notificationSettingsIntent(this@MainActivity),
-                                checked = false,
+                                checked = enabled,
                             )
                         }
                     },
@@ -177,7 +183,7 @@ class MainActivity : ComponentActivity() {
             targetMode = targetMode ?: current.targetMode,
             point = current.point,
         )
-        lifecycleScope.launch { container.repository.updateConfig(next) }
+        container.updateConfig(next)
     }
 
     /**
@@ -248,6 +254,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user is back in the app: stop the second hand-off line from popping over our screen.
         handoffActive = false
+        handoffHandler.removeCallbacksAndMessages(null)
     }
 
     override fun onStop() {

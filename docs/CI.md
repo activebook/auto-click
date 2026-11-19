@@ -13,10 +13,10 @@ Repo: `activebook/auto-click` (public, MIT). Toolchain: AGP 8.13.0, Gradle 8.14.
 
 | # | Goal | Why it matters for this app |
 |---|------|-----------------------------|
-| G1 | Every push and PR compiles, and the 37 unit tests pass | The timing engine and grid maths are the parts that silently break |
+| G1 | Every push and PR compiles, and the 60 unit tests pass | The timing engine and grid maths are the parts that silently break |
 | G2 | `lintDebug` stays at **0 errors** | The project's own quality bar; warnings (version hints) are allowed and not enforced |
 | G3 | The built APK still has **no `INTERNET` permission** | It is the app's central privacy promise; a regression here is a product lie, not a style issue |
-| G4 | A tag produces a downloadable APK, once, with no laptop involved | Today's release was cut by hand; that is the step to delete |
+| G4 | A tag produces a downloadable APK, once, with no laptop involved | Automated via GitHub Actions on `v*.*.*` tags |
 | G5 | The artifact's `versionName` / `versionCode` match the source | Prevents a release whose file name and manifest disagree |
 | G6 | Results are reproducible from the repo alone | Pinned toolchain, cached Gradle, no local `local.properties` dependency |
 
@@ -52,7 +52,7 @@ flowchart LR
     PR["PR / push"] --> CHECK["check<br/>unit tests · lint · version sanity"]
     CHECK --> BUILD["assemble<br/>debug APK + invariant checks"]
     BUILD --> ART["artifact: AutoClick-&lt;version&gt;-debug.apk<br/>14-day retention"]
-    TAG["tag v1.2.0"] --> CHECK2["check (same gates)"]
+    TAG["tag v1.6.6"] --> CHECK2["check (same gates)"]
     CHECK2 --> REL["release<br/>R8 build · sign · verify artifact"]
     REL --> PUB["GitHub Release<br/>APK + checksums + notes"]
     PUB --> DONE["download URL"]
@@ -67,10 +67,11 @@ flowchart LR
 | Checkout | `actions/checkout@v4` | `fetch-depth: 0` only for the tag job (needs tags) |
 | JDK | `actions/setup-java@v4`, Temurin **21**, `distribution: temurin` | Matches the verified local JDK |
 | Gradle cache | `gradle/actions/setup-gradle@v4` | Caches `~/.gradle` and the wrapper distribution; removes ~90 s cold download |
-| Android SDK | `android-actions/setup-android@v3`, then `sdkmanager "platforms;android-36" "build-tools;36.0.0"` | Runner images ship SDK 35 by default; 36 must be installed explicitly. Licences are pre-accepted |
-| SDK path | export `ANDROID_SDK_ROOT` (already set by the action) | `local.properties` must **not** be needed — AGP falls back to the env var |
-| Unit tests | `./gradlew :app:testDebugUnitTest --stacktrace` | 37 tests; any failure fails the job |
-| Lint | `./gradlew :app:lintDebug` | Job fails on `error`; 18 "newer version available" warnings are expected and tolerated |
+| Android SDK | Runner's pre-installed `sdkmanager`, installing `platforms;android-36` and `build-tools;36.0.0` | `setup-android@v3` tries to install the removed `tools` package and fails on current images |
+| SDK path | export `ANDROID_SDK_ROOT` and `ANDROID_HOME` | `local.properties` must **not** be needed — AGP falls back to the env var |
+| Workflow YAML | `python3 scripts/check-workflows.py` | Catches YAML scalar syntax mistakes before GitHub silently drops triggers |
+| Unit tests | `./gradlew :app:testDebugUnitTest --stacktrace` | 60 tests; any failure fails the job |
+| Lint | `./gradlew :app:lintDebug --stacktrace` | Job fails on `error`; 13 dependency-version warnings are expected and tolerated |
 | Report | upload `app/build/reports/tests/**` and `lint-results-debug.html` on failure | Makes a red run actionable without a re-run |
 
 ### 5.2 `assemble` (push / PR, ~2 min after `check`)
@@ -186,7 +187,7 @@ Two other facts, measured rather than hoped for:
 | Debug-key releases mistaken for store-grade | medium | The release body states the signing key in one line; README says the same |
 | Tag pushed for an abandoned version | low | Tag guard + `main`-ancestor check + manual `workflow_dispatch` as the only re-publish path |
 
-## 11. Decisions needed before writing the YAML
+## 11. Decisions
 
 1. **Signing:** start with the debug key (A), or generate and store a real keystore now (B)?
 2. **Publish trigger:** any `v*.*.*` tag publishes automatically, or should publishing require a
@@ -240,7 +241,7 @@ Three failures were found and fixed on the way, each a real design lesson rather
 │  └─ release.yml   # tag guards, key restore, R8 build, verify, publish
 └─ dependabot.yml   # gradle + github-actions, weekly (P3, not yet added)
 docs/releases/
-└─ 1.2.0.md        # release notes, reviewed like code
+└─ <version>.md     # release notes, reviewed like code (1.2.0.md–1.6.6.md)
 scripts/
 ├─ verify-apk.sh    # the artifact gate (also usable by hand)
 └─ check-workflows.py

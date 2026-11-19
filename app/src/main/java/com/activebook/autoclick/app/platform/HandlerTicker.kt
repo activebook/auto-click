@@ -29,6 +29,9 @@ class HandlerTicker(
     @Volatile
     private var running = false
 
+    @Volatile
+    private var stopped = false
+
     private var anchorUptime = 0L
     private var nextTick = 0L
 
@@ -36,12 +39,13 @@ class HandlerTicker(
         override fun run() {
             if (!running) return
             scheduleNext()
+            if (!running) return
             onTick()
         }
     }
 
     override fun start() {
-        if (running) return
+        if (running || stopped) return
         running = true
         anchorUptime = clock()
         nextTick = 0L
@@ -49,6 +53,7 @@ class HandlerTicker(
     }
 
     override fun stop() {
+        stopped = true
         running = false
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()

@@ -443,4 +443,66 @@ class ClickerCoordinatorTest {
         assertEquals(2, harness.tickers.size)
         assertEquals(0L, (harness.state as ClickerState.Running).tapCount)
     }
+
+    @Test
+    fun `reattaching the sink clears a SERVICE_DISCONNECTED error`() {
+        val harness = Harness()
+        harness.coordinator.start()
+        harness.sinkAvailable = false
+        harness.coordinator.onSinkChanged()
+        assertEquals(
+            FailureReason.SERVICE_DISCONNECTED,
+            (harness.state as ClickerState.Error).reason,
+        )
+
+        harness.sinkAvailable = true
+        harness.coordinator.onSinkChanged()
+        assertEquals(ClickerState.Idle, harness.state)
+    }
+
+    @Test
+    fun `a disconnected sink fails a paused session`() {
+        val harness = Harness()
+        harness.coordinator.start()
+        harness.coordinator.pause()
+        assertTrue((harness.state as ClickerState.Running).paused)
+
+        harness.sinkAvailable = false
+        harness.coordinator.onSinkChanged()
+        val state = harness.state
+        assertTrue(state is ClickerState.Error)
+        assertEquals(FailureReason.SERVICE_DISCONNECTED, (state as ClickerState.Error).reason)
+    }
+
+    @Test
+    fun `lowering the budget below spent count while paused finishes the session immediately`() {
+        val harness = Harness()
+        harness.coordinator.start()
+        repeat(3) {
+            harness.tickers.single().fire()
+            harness.sink.deliverLatest()
+        }
+        harness.coordinator.pause()
+        assertTrue((harness.state as ClickerState.Running).paused)
+
+        val tightened = ClickerConfig.ofSeconds(4, 1, 2, true, true)
+        harness.config = tightened
+        harness.coordinator.applyConfig(tightened)
+
+        val state = harness.state
+        assertTrue(state is ClickerState.Finished)
+        assertEquals(3L, (state as ClickerState.Finished).tapCount)
+    }
+
+    @Test
+    fun `start is ignored while a session is paused`() {
+        val harness = Harness()
+        harness.coordinator.start()
+        harness.coordinator.pause()
+        assertTrue((harness.state as ClickerState.Running).paused)
+
+        harness.coordinator.start()
+        assertEquals(1, harness.tickers.size)
+        assertTrue((harness.state as ClickerState.Running).paused)
+    }
 }

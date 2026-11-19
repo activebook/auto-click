@@ -1,5 +1,6 @@
 package com.activebook.autoclick.app.service
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -34,6 +35,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -57,6 +60,12 @@ class OverlayService : Service() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> container().coordinator.pause()
+                Intent.ACTION_SCREEN_ON -> {
+                    val keyguard = getSystemService(KeyguardManager::class.java)
+                    if (keyguard?.isKeyguardLocked == false) {
+                        container().coordinator.resume()
+                    }
+                }
                 Intent.ACTION_USER_PRESENT -> container().coordinator.resume()
                 else -> Unit
             }
@@ -100,7 +109,7 @@ class OverlayService : Service() {
      */
     private fun attachBubble(force: Boolean = false): Boolean {
         if (overlay != null) return true
-        if (!force && !container().handVisible.value) return false
+        if (!force && container().handVisible.value != true) return false
         if (!Permissions.hasOverlayPermission(this)) return false
 
         val controller = OverlayController(
@@ -117,6 +126,8 @@ class OverlayService : Service() {
             onStopTapping = { container().coordinator.stop() },
             onOpenApp = { openApp() },
             onHideHand = { hideHand() },
+            onUpdateConfig = { container().updateConfig(it) },
+            onSaveBubblePosition = { x, y -> container().saveBubblePosition(x, y) },
         )
 
         try {
@@ -133,6 +144,7 @@ class OverlayService : Service() {
         bubbleAvailable = true
         container().coordinator.setGuard(controller)
         overlayVisible.value = true
+        publishNotification(container().coordinator.state.value)
         return true
     }
 
@@ -177,8 +189,8 @@ class OverlayService : Service() {
      * notification goes with it. The hand comes back from the settings page (or a fresh Start).
      */
     private fun hideHand() {
-        scope.launch { container().repository.setHandVisible(false) }
         releaseBubble()
+        container().setHandVisible(false)
         stopSelf()
     }
 
@@ -186,23 +198,32 @@ class OverlayService : Service() {
         when (intent?.action) {
             ACTION_STOP -> container().coordinator.stop()
             ACTION_HIDE -> hideHand()
+            ACTION_DETACH -> {
+                releaseBubble()
+                stopSelf()
+            }
             ACTION_START -> {
                 // Starting implies the hand should be visible (you need it to stop): clear a
                 // previous "hide", attach first, refresh the guard bounds, then start.
-                scope.launch { container().repository.setHandVisible(true) }
+                container().setHandVisible(true)
                 attachBubble(force = true)
                 overlay?.updateBoundsNow()
                 container().coordinator.start()
             }
             ACTION_SHOW -> {
-                scope.launch { container().repository.setHandVisible(true) }
                 // No bubble and no permission: do not sit here pretending to be useful.
                 if (!attachBubble(force = true)) {
                     stopSelf()
                     return START_NOT_STICKY
                 }
             }
-            null -> attachBubble()
+            null -> {
+                scope.launch {
+                    if (!container().repository.handVisible.first() || !attachBubble(force = true)) {
+                        stopSelf()
+                    }
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -230,7 +251,8 @@ class OverlayService : Service() {
 
     private fun observeState() {
         scope.launch {
-            container().coordinator.state.collect { state -> publishNotification(state) }
+            combine(container().coordinator.state, container().config) { state, _ -> state }
+                .collect { state -> publishNotification(state) }
         }
     }
 
@@ -349,6 +371,7 @@ class OverlayService : Service() {
     private fun registerScreenReceiver() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }
         ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -362,6 +385,7 @@ class OverlayService : Service() {
         const val ACTION_SHOW = "com.activebook.autoclick.app.action.SHOW"
         const val ACTION_STOP = "com.activebook.autoclick.app.action.STOP"
         const val ACTION_HIDE = "com.activebook.autoclick.app.action.HIDE"
+        const val ACTION_DETACH = "com.activebook.autoclick.app.action.DETACH"
 
         private const val CHANNEL_ID = "autoclick_status"
         private const val NOTIFICATION_ID = 4711
@@ -380,9 +404,15 @@ class OverlayService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        /** Removes the bubble and stops a running session. */
+        /** Removes the bubble and stops a running session, persisting the hidden preference. */
         fun requestHide(context: Context) {
             val intent = Intent(context, OverlayService::class.java).setAction(ACTION_HIDE)
+            runCatching { context.startService(intent) }
+        }
+
+        /** Detaches the bubble and stops the service without altering the user's hand preference. */
+        fun requestDetach(context: Context) {
+            val intent = Intent(context, OverlayService::class.java).setAction(ACTION_DETACH)
             runCatching { context.startService(intent) }
         }
 

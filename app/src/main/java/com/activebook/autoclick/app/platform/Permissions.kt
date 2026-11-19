@@ -1,15 +1,14 @@
 package com.activebook.autoclick.app.platform
 
-import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
 import com.activebook.autoclick.app.service.accessibility.AutoClickAccessibilityService
 
@@ -65,7 +64,10 @@ object Permissions {
     /**
      * The battery whitelist dialog: "always run in the background?" — one tap, and it is the only
      * thing that can put us on the exemption list.
+     *
+     * AutoClick is sideloaded rather than distributed through the Play Store (ADR-008).
      */
+    @SuppressLint("BatteryLife")
     fun batteryOptimizationIntent(context: Context): Intent =
         Intent(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
@@ -83,11 +85,8 @@ object Permissions {
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    fun hasNotificationPermission(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-        return context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-    }
+    fun hasNotificationPermission(context: Context): Boolean =
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
 
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
         val powerManager = context.getSystemService(PowerManager::class.java) ?: return true
@@ -139,14 +138,11 @@ object Permissions {
             }
         }
 
-        if (startSafely(
-                context,
-                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        ) {
-            return AccessibilityRoute.LIST
-        }
+        startSafely(
+            context,
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
         return AccessibilityRoute.LIST
     }
 

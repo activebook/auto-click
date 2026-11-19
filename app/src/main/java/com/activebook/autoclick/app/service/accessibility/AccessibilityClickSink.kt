@@ -48,20 +48,21 @@ class AccessibilityClickSink(service: AccessibilityService) : ClickSink {
         durationMs: Long,
         onResult: (TapResult) -> Unit,
     ) {
+        if (serviceReference !== service) {
+            onResult(TapResult.CANCELLED)
+            return
+        }
+
         val reported = AtomicBoolean(false)
         fun report(result: TapResult) {
             if (reported.compareAndSet(false, true)) onResult(result)
         }
 
-        // A stationary path is a press-and-hold for `durationMs`: a tap, not a long press.
-        val path = Path().apply { moveTo(x, y) }
-        val stroke = GestureDescription.StrokeDescription(
-            path,
-            0L,
-            durationMs.coerceIn(MIN_STROKE_MS, MAX_STROKE_MS),
-        )
+        if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f) {
+            report(TapResult.CANCELLED)
+            return
+        }
 
-        val gesture = GestureDescription.Builder().addStroke(stroke).build()
         val callback = object : AccessibilityService.GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 report(TapResult.DELIVERED)
@@ -73,6 +74,14 @@ class AccessibilityClickSink(service: AccessibilityService) : ClickSink {
         }
 
         val accepted = try {
+            // A stationary path is a press-and-hold for `durationMs`: a tap, not a long press.
+            val path = Path().apply { moveTo(x, y) }
+            val stroke = GestureDescription.StrokeDescription(
+                path,
+                0L,
+                durationMs.coerceIn(MIN_STROKE_MS, MAX_STROKE_MS),
+            )
+            val gesture = GestureDescription.Builder().addStroke(stroke).build()
             service.dispatchGesture(gesture, callback, mainHandler)
         } catch (error: RuntimeException) {
             false

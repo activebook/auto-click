@@ -36,9 +36,13 @@ class AppContainer(context: Context) {
     val config: StateFlow<ClickerConfig> = repository.config
         .stateIn(scope, SharingStarted.Eagerly, ClickerConfig.Default)
 
-    /** User preference: may the floating hand be on screen (on top of the overlay permission). */
-    val handVisible: StateFlow<Boolean> = repository.handVisible
-        .stateIn(scope, SharingStarted.Eagerly, true)
+    /**
+     * User preference: may the floating hand be on screen (on top of the overlay permission).
+     * Starts as `null` until DataStore emits so cold-start UI never overwrites `false` with an
+     * optimistic `true`.
+     */
+    val handVisible: StateFlow<Boolean?> = repository.handVisible
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     val coordinator: ClickerCoordinator = ClickerCoordinator(
         configProvider = { config.value },
@@ -59,6 +63,21 @@ class AppContainer(context: Context) {
         scope.launch {
             config.collect { coordinator.applyConfig(it) }
         }
+    }
+
+    /** Persists hand visibility on the process scope so service teardown cannot cancel it. */
+    fun setHandVisible(visible: Boolean) {
+        scope.launch { repository.setHandVisible(visible) }
+    }
+
+    /** Persists config changes on the process scope so service teardown cannot cancel them. */
+    fun updateConfig(config: ClickerConfig) {
+        scope.launch { repository.updateConfig(config) }
+    }
+
+    /** Persists bubble coordinates on the process scope so service teardown cannot cancel them. */
+    fun saveBubblePosition(x: Int, y: Int) {
+        scope.launch { repository.saveBubblePosition(x, y) }
     }
 
     /** Called by the accessibility service when it connects. */

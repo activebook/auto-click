@@ -1,6 +1,6 @@
 # AutoClick — Design & UX
 
-**Version 1.2.0** · `com.activebook.autoclick.app` · Android 8.0+ · English only
+**Version 1.6.6** · `com.activebook.autoclick.app` · Android 8.0+ · English only
 
 This document is the product and interaction design of AutoClick: what the app is, how each surface
 behaves, what every pixel and every word is for. It is written to be sufficient on its own — an
@@ -14,10 +14,11 @@ record of how this design was arrived at (including every rejected attempt) is i
 
 ## 1. What AutoClick is
 
-AutoClick taps **one fixed point on the screen, over and over, on a timer you set**. The screen is
-divided into **nine cells**; you choose a cell, and every *N* seconds AutoClick presses the centre of
-that cell. A small **floating hand** sits above every other app so the loop can be started, retargeted
-and stopped without leaving whatever app you are tapping in.
+AutoClick taps **one fixed point on the screen, over and over, on a timer you set**. You can divide
+the screen into **nine cells** and let AutoClick press the centre of a chosen cell, or point directly
+at an **exact spot**; runs can continue until you stop them or finish automatically after a chosen
+tap budget. A small **floating hand** sits above every other app so the loop can be started,
+retargeted, retimed and stopped without leaving whatever app you are tapping in.
 
 The user it is written for:
 
@@ -135,9 +136,10 @@ the only unit where an auto-tapper's behaviour is predictable to a human without
 
 ## 4. The floating hand
 
-The hand is the app's presence. It is **not** a preference with its own switch: it exists when
-*Display over other apps* is granted, and it goes away when that permission goes away. Two controls
-for one outcome would eventually disagree (this was tried and removed — see PLAN ADR-016).
+The hand is the app's presence. Its visibility follows **both** the *Display over other apps*
+permission and the user's `Show floating hand` preference (ADR-021): hiding the hand also stops any
+active run so a tap loop is never left running unseen without a way to stop it, and pressing Start
+re-shows the hand automatically.
 
 ### 4.1 Form
 
@@ -150,7 +152,7 @@ for one outcome would eventually disagree (this was tried and removed — see PL
 | Shadow | **none** | Compose paints a shaped shadow as an elevation halo around the *view*; around a circle that reads as a pale rectangular plate. Removed on purpose |
 | Glyph | Hand, 28 dp, above centre, in `onPrimary` (running) / `primary` (idle) | Sits flush above the state word; the glyph's bottom padding + the text's line leading leave a hairline of daylight so they never mix |
 | Label | Directly under the glyph, nudged up 2 dp (placement-only offset) so the gap is a ~2 dp hairline, **6 sp** bold, letter spacing 0.3: `ON` / `OFF` / `PAUSED` / `DONE` | The offset tightens the gap without moving the glyph. `OFF` `onSurfaceVariant`, `ON` `onPrimary`, `PAUSED` `#B45309`, `DONE` `#1B7F3B` |
-| Semantics | `AutoClick is tapping. Tap to open controls.` / `AutoClick finished its tap budget. Tap to open controls.` / `AutoClick is idle. Tap to open controls.` | Screen readers get the state *and* the affordance |
+| Semantics | `AutoClick is paused. Tap to open controls.` / `AutoClick is tapping. Tap to open controls.` / `AutoClick finished its tap budget. Tap to open controls.` / `AutoClick is idle. Tap to open controls.` | Screen readers get the state *and* the affordance |
 
 ### 4.2 Behaviour
 
@@ -160,7 +162,7 @@ for one outcome would eventually disagree (this was tried and removed — see PL
 | Long-press (hold ~400 ms, no movement) | Raises the hide popover (1.6.3): a one-button eye-off card over a full-screen scrim. Eye = hide hand + stop; any other tap dismisses. Moving past slop first cancels the hold (it's a drag); releasing early is a tap |
 | Drag | Moves the hand 1:1 with the finger. Drag begins only after the system touch slop, so a drag is never mistaken for a tap and vice versa |
 | Release | Snaps to the nearer screen edge, **4 dp** margin (1.6.5; was 12), **140 ms** animation; vertical position is kept exactly. Horizontal placement uses the full display width (`overlayArea`), so curved-edge / side-bar insets don't add dead space |
-| Outside the screen | Clamped to the usable area; the hand can never be parked half off-screen |
+| Outside the screen | Clamped to `overlayArea` (full display width, vertical system-bar insets kept); the hand can never be parked half off-screen |
 | Restart | Position is remembered (DataStore) and restored on the next launch / service restart |
 | First appearance | Default is the right edge less 4 dp, at 35 % of the screen height; after that the saved `bubble_x` / `bubble_y` is restored |
 
@@ -251,13 +253,13 @@ Visibility is a persisted preference (`hand_visible`, default on) **on top of** 
 permission: hand on screen = permission AND preference. The "Before you start" overlay switch still
 owns the *permission*; this switch owns *visibility*, so the two are not redundant.
 
-### 5.3 Anchoring rules (the panel must stay beside the hand)
+### 5.4 Anchoring rules (the panel must stay beside the hand)
 
 | Rule | Value |
 |---|---|
 | Horizontal gap | **8 dp** from the hand's disc edge, flipped to the left side when there is no room on the right |
 | Vertical | Panel is vertically **centred on the hand** (`y = handCentre − panelHeight/2`) |
-| Clamp | Panel is kept inside the usable area; at the very bottom edge the page is clamped to the screen bottom, which is correct and not a bug |
+| Clamp | Panel is kept inside `overlayArea` (full display width, vertical system-bar insets kept); at the very bottom edge the page is clamped to the screen bottom, which is correct and not a bug |
 | Re-anchor triggers | Mode swap (controls ⇄ settings), any measured height change, drag in flight (throttled to **48 ms**), drag release, edge-snap animation end |
 | Why a layout listener | A `post {}` fires before the next frame's measure and would read the *old* height; only `OnLayoutChangeListener` is ordered after layout |
 
@@ -400,15 +402,15 @@ Two details worth keeping in the UI:
 
 | Surface | Text |
 |---|---|
-| Hand label | `ON` / `OFF` / `PAUSED` |
+| Hand label | `ON` / `OFF` / `PAUSED` / `DONE` |
 | Hand countdown ring | A circular arc fills over one interval and resets on each tap (§4.4); hidden when idle, paused or finished |
 | Panel status | **none** while idle, running or finished — the play/stop glyph carries the state; the failure sentence appears only on error |
-| App status detail | Same counters; `Waiting for the screen to unlock (n taps so far)` while paused |
-| Notification title | `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — stopped` |
-| Notification text | `Ready · every 3s` / `Paused while the screen is off · 5 taps so far` |
-| Notification action | One contextual action: `Stop` while running, `Start` while idle |
+| App status | State dot + headline (`Tapping` / `Paused` / `Finished` / `Needs attention` / `Idle`) and `Every Ns`; no extra status paragraph — a failure sentence appears only on error |
+| Notification title | `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — finished` / `AutoClick — stopped` |
+| Notification text | `Floating hand ready · every 3s` (or `Ready · every 3s`) / `5 taps · every 3s` / `Paused while the screen is off · 5 taps so far` / `Finished its tap budget · 5 taps delivered · tap Start to run again` / error sentence |
+| Notification actions | Primary contextual action (`Stop` while running, `Start` otherwise) + `Hide hand` |
 
-Pluralisation is explicit: `1 tap` / `n taps`. No `1 taps`, anywhere.
+Pluralisation is explicit: `1 tap` / `n taps` (including `Stops by itself after 1 tap.` vs `Stops by itself after n taps.`). No `1 taps`, anywhere.
 
 ### 8.2 Failure copy (one source, used by hand, panel, app and notification)
 
@@ -450,7 +452,7 @@ Light theme (dark theme mirrors the same roles):
 | `secondary` / `secondaryContainer` | `#475569` / `#E2E8F0` | Neutral supporting roles |
 | `background` | `#F4F7F6` | App page |
 | `surface` | `#FFFFFF` | Cards, panel, hand (idle) |
-| `surfaceVariant` | `#E6EFEC` | Panel's secondary buttons, step buttons |
+| `surfaceVariant` | `#E6EFEC` | Unselected grid cells, inactive pick button, panel step buttons |
 | `onSurface` / `onSurfaceVariant` | `#111817` / `#445250` | Text / secondary text |
 | `outline` / `outlineVariant` | `#9AA9A5` / `#CBD9D5` | Hairlines and card borders |
 | `error` / `errorContainer` | `#B3261E` / `#F9DEDC` | Errors, Stop button |
@@ -475,7 +477,7 @@ Material 3 defaults, no custom font. Roles actually used: `headlineSmall` (app t
 | Hide popover | 14 dp | **0** | dark glass `#101D19` α 0.93 + 1 dp white α 0.14 (the one dark control) |
 | Hand | circle | **0** | see §4.1 |
 | Pills (`Open`, `Done`) | 12 dp | 0 | outlined / `primaryContainer` |
-| Picker hint bar | 16 dp | 0 | `#F2101A1C` on a `#99101618` scrim |
+| Picker chrome | floating text | 0 | White `TipLine` with drop shadow directly on `#99101618` scrim |
 
 Rejected looks are recorded so they are not reintroduced: α 0.78 let the host app's text ghost
 through the card ("looks like a rendering fault"), and a fixed dark "pod" glass (1.6.4) broke
@@ -493,8 +495,8 @@ scrim was removed because the user read it as "a shadow on the background".
 | Rotation | Glyph rotated **22° clockwise** — a vertical hand read as a "stop" gesture, the tilt reads as a tap |
 | Scale | Glyph ≈ **50 %** of the legacy plate; adaptive foreground **44 %** of the 108 dp canvas, inside the 72 dp safe circle |
 | Density assets | `mipmap-{mdpi..xxxhdpi}/ic_launcher.png` (48–192 px) for launchers that ignore adaptive icons |
-| Adaptive | `mipmap-anydpi-v26/ic_launcher.xml` → `background` = `@color/ic_launcher_background`, `foreground`/`monochrome` = the same hand bitmap |
-| Legacy plate colour | `#18717A`, defined in `values/ic_launcher_background.xml` |
+| Adaptive | `mipmap-anydpi/ic_launcher.xml` → `background` = `@color/ic_launcher_background`, `foreground`/`monochrome` = the same hand bitmap |
+| Legacy plate colour | `#18717A`, defined in `values/colors.xml` |
 
 ---
 
@@ -514,13 +516,12 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 - `Greyed out? App info › Allow restricted settings.`
 - `Where to tap` · `A cell centre, or any spot you point at.` · `Pick a cell` · `Pick exact spot` · `Exact spot` · `65% · 34% from the top-left of the screen`
 - `Interval` · `Seconds to wait between two taps.` · `Seconds` · `Apply` · `1–3600 s` · `1s 2s 5s 10s 30s 60s`
-- `Stop after` · `Never` · `1` · `3` · `5` · `10` · `100` · `Taps` · `Apply` · `0–100000 taps · 0 = never` · `Runs until you stop it.` · `Stops by itself after 100 taps.`
+- `Stop after` · `Never` · `1` · `3` · `5` · `10` · `100` · `Taps` · `Apply` · `0–100000 taps · 0 = never` · `Runs until you stop it.` · `Stops by itself after 1 tap.` · `Stops by itself after 100 taps.`
 - `Advanced` · `Feedback while it runs. Both on by default.` · `All on` / `Some off`
 - `Floating hand` · `Show floating hand` · `The hand floats over other apps.` · `Hidden. Turn on to bring it back.` · `Needs "Display over other apps" first.`
 - `Hide hand` (notification action) · long-press popover eye-off button (`Hide the floating hand and stop`)
 - `Vibrate` · `A short buzz on every tap.` · `Flash marker` · `A ring at the point you just tapped.`
 - `Taps are sent through the accessibility service. Nothing is read from the screen and nothing leaves the phone.`
-- `Waiting for the screen to unlock (4 taps so far)` · `51 taps delivered · 0 skipped`
 - `Tip: drag the hand to the opposite edge, then press start again.`
 
 **Panel**
@@ -541,7 +542,7 @@ All user-facing strings, in one place, so new copy does not drift in tone.
   single tap at the screen position you chose, repeating on the interval you set. It never reads what
   is shown on your screen and never sends your data anywhere.`
 - Notification channel `AutoClick status` — `Shows whether AutoClick is tapping, with stop controls.`
-- Notification titles `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — stopped`; actions `Stop` / `Start`
+- Notification titles `AutoClick — tapping` / `AutoClick — idle` / `AutoClick — finished` / `AutoClick — stopped`; actions `Stop` / `Start` + `Hide hand`
 - Hand-off Toasts `Finding "AutoClick taps" — please wait` · `Click the highlighted row`
 - Fallback Toast `Scroll to "Downloaded services" — first row`
 
@@ -563,11 +564,11 @@ All user-facing strings, in one place, so new copy does not drift in tone.
 | Idle | Start (gate missing) | Error | Hand stays `OFF`, message names the missing permission, orange button visible |
 | Idle | Start (hand over target) | Error | Message + tip, hand unchanged, no tap sent |
 | Running | Stop (panel, app or notification) | Idle | Hand → `OFF`, crosshair removed, counters frozen for good |
-| Running | Screen off | Running/paused | Hand shows `PAUSED`, app says `Waiting for the screen to unlock`, notification says `Paused while the screen is off` |
-| Paused | Unlock | Running | Resumes on the same interval; no burst of catch-up taps |
-| Running | Hand dragged onto target | Running (skipping) | `n skipped` climbs, taps keep going elsewhere |
+| Running | Screen off | Running/paused | Hand shows `PAUSED`, app shows `Paused`, notification says `Paused while the screen is off` |
+| Paused | Unlock (or screen on without lock screen) | Running | Resumes on the same interval; no burst of catch-up taps |
+| Running | Hand dragged onto target | Running (skipping) | `n skipped` climbs in engine/notification, taps keep going elsewhere |
 | Running | Accessibility revoked / service killed | Error | `Needs attention`, scheduler stopped, sentence names the fix |
-| Running | Delivered tap reaches the budget | Finished | Hand → `DONE` (green), scheduler stopped, counters frozen, `Finished · n taps delivered · press Start to run again` |
+| Running | Delivered tap reaches the budget | Finished | Hand → `DONE` (green), scheduler stopped, counters frozen, app shows `Finished`, notification says `Finished its tap budget` |
 | Finished | Start | Running | Fresh counters, budget re-armed |
 | Error | User fixes it and presses Start | Running | Normal run |
 
@@ -581,13 +582,13 @@ never disagree.
 | Situation | Designed behaviour |
 |---|---|
 | Screen off / locked | Pause. AutoClick does not tap a black screen |
-| Unlock | Resume on the original interval, no catch-up burst |
+| Unlock (or screen on with no lock screen) | Resume on the original interval, no catch-up burst |
 | Rotation while running | The same *logical* cell is re-solved from the new metrics on the next tick |
 | Split-screen / resized window | The grid follows the display, because the grid is a screen grid, not an app layout |
 | Stop | Immediate and final: schedule cancelled, in-flight gesture result ignored by generation, crosshair dismissed |
 | Process frozen longer than one interval | The schedule re-bases; missed ticks are dropped and counted, never replayed |
 | Reinstall / update | Accessibility unbinds (system behaviour) and, on some ROMs, the overlay permission resets; the app reports `n of 4`, never a mystery |
-| Overlay permission missing but Accessibility granted | The loop still runs headless, with the notification as the only status surface; no hand, no lie |
+| Overlay permission missing | App `Start tapping` stays disabled until both Accessibility and Display over other apps are on; if overlay permission is revoked mid-run, the bubble is detached and the run stops so tapping never runs invisibly |
 | Language | English only, by decision. No `values-zh`, no locale switcher |
 
 ---
@@ -599,7 +600,7 @@ never disagree.
 | Hand | `contentDescription` carries the run state + the tap affordance |
 | Panel buttons | Every icon button has a `contentDescription` (`Start tapping`, `Settings`, `Close panel`) |
 | Pills / step buttons | `Open the app`, `Close settings`, `Decrease interval`, `Increase interval` |
-| Cells | Number labels are always drawn; the selected cell keeps its number under the crosshair |
+| Cells | Every cell carries a `Target cell n` `contentDescription`; the compact grid renders a crosshair on the selected cell, while the full-screen picker displays corner numbers across all cells |
 | Contrast | Accent `#0F766E` on white and white on accent both clear 4.5:1; the floating hand/panel use the app theme (white surface + green accent in light mode, dark surface + teal in dark mode), so they match the app and stay legible; the dark hide popover uses light icons `#E8F3F0` on `#101D19` (>12:1) |
 | Font scale | Cards and panel wrap; the panel re-anchors on any height change, which also covers a larger font |
 
@@ -607,8 +608,9 @@ never disagree.
 
 ## 14. Design decisions worth knowing before changing anything
 
-1. **The hand is not a setting.** It follows the overlay permission and nothing else. Adding a "show
-   hand" switch reintroduces the state that can disagree with the permission.
+1. **Hand visibility = permission AND user choice.** Visibility follows both the overlay permission
+   and the `Show floating hand` preference (ADR-021): hiding the hand also stops the run so there is
+   no invisible tap loop, and Start brings the hand back automatically.
 2. **Settings are in the panel.** Not because a modal is nicer, but because a background service
    cannot reliably raise an activity, and because retargeting should not interrupt the tapped app.
    The `Open` pill is the escape hatch to the full app.

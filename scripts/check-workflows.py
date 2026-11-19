@@ -19,7 +19,8 @@ def main() -> int:
     failures = []
     for path in files:
         try:
-            doc = yaml.safe_load(open(path, encoding="utf-8"))
+            with open(path, encoding="utf-8") as fh:
+                doc = yaml.safe_load(fh)
         except Exception as exc:  # noqa: BLE001 - report any parser error verbatim
             failures.append(f"{path}: {exc}")
             continue

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
@@ -48,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -298,12 +301,15 @@ private fun StatusCard(
 ) {
     SectionCard(title = "Status", subtitle = null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val (dotColor, headline) = when {
-                running && (state as ClickerState.Running).paused -> WarningAmber to "Paused"
-                running -> SuccessGreen to "Tapping"
-                state is ClickerState.Finished -> SuccessGreen to "Finished"
-                state is ClickerState.Error -> MaterialTheme.colorScheme.error to "Needs attention"
-                else -> MaterialTheme.colorScheme.onSurfaceVariant to "Idle"
+            val (dotColor, headline) = when (state) {
+                is ClickerState.Running -> if (state.paused) {
+                    WarningAmber to "Paused"
+                } else {
+                    SuccessGreen to "Tapping"
+                }
+                is ClickerState.Finished -> SuccessGreen to "Finished"
+                is ClickerState.Error -> MaterialTheme.colorScheme.error to "Needs attention"
+                ClickerState.Idle -> MaterialTheme.colorScheme.onSurfaceVariant to "Idle"
             }
             Box(
                 modifier = Modifier
@@ -601,8 +607,6 @@ private fun AdvancedCard(
             checked = config.flashOnTap,
             onCheckedChange = onFlash,
         )
-        // The floating hand is not here on purpose: it is the switch in "Before you start", and a
-        // second control for the same thing was the thing the owner objected to.
     }
 }
 
@@ -612,6 +616,7 @@ private fun IntervalCard(
     onIntervalSeconds: (Int) -> Unit,
     onStopAfterTaps: (Int) -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     var text by remember(config.intervalSeconds) { mutableStateOf(config.intervalSeconds.toString()) }
     val parsed = text.toIntOrNull()
     val valid = parsed != null &&
@@ -658,7 +663,18 @@ private fun IntervalCard(
                 label = { Text("Seconds") },
                 singleLine = true,
                 isError = text.isNotEmpty() && !valid,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (valid && parsed != config.intervalSeconds) {
+                            parsed?.let(onIntervalSeconds)
+                        }
+                        focusManager.clearFocus()
+                    },
+                ),
                 modifier = Modifier.width(150.dp),
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -720,7 +736,18 @@ private fun IntervalCard(
                 label = { Text("Taps") },
                 singleLine = true,
                 isError = budgetText.isNotEmpty() && !budgetValid,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (budgetValid && budgetParsed != config.stopAfterTaps) {
+                            budgetParsed?.let(onStopAfterTaps)
+                        }
+                        focusManager.clearFocus()
+                    },
+                ),
                 modifier = Modifier.width(150.dp),
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -739,10 +766,10 @@ private fun IntervalCard(
         )
 
         Text(
-            text = if (config.stopAfterTaps == ClickerConfig.NO_TAP_BUDGET) {
-                "Runs until you stop it."
-            } else {
-                "Stops by itself after ${config.stopAfterTaps} taps."
+            text = when (config.stopAfterTaps) {
+                ClickerConfig.NO_TAP_BUDGET -> "Runs until you stop it."
+                1 -> "Stops by itself after 1 tap."
+                else -> "Stops by itself after ${config.stopAfterTaps} taps."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

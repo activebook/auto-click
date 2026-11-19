@@ -60,6 +60,8 @@ import kotlinx.coroutines.launch
  */
 class GridPickerActivity : ComponentActivity() {
 
+    private var saving = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -77,33 +79,31 @@ class GridPickerActivity : ComponentActivity() {
                     mode = mode,
                     config = config,
                     areaProvider = { container.displayProvider.usableArea() },
-                    onPickCell = { index ->
-                        save(config, TargetMode.CELL, index, config.point)
-                    },
-                    onPickPoint = { point ->
-                        save(config, TargetMode.POINT, config.cellIndex, point)
-                    },
+                    onPickCell = { index -> save(TargetMode.CELL, cellIndex = index) },
+                    onPickPoint = { point -> save(TargetMode.POINT, point = point) },
                 )
             }
         }
     }
 
     private fun save(
-        config: ClickerConfig,
         mode: TargetMode,
-        cellIndex: Int,
-        point: RelativePoint,
+        cellIndex: Int? = null,
+        point: RelativePoint? = null,
     ) {
+        if (saving) return
+        saving = true
+        val current = container().config.value
         lifecycleScope.launch {
             container().repository.updateConfig(
                 ClickerConfig.ofSeconds(
-                    cellIndex = cellIndex,
-                    intervalSeconds = config.intervalSeconds,
-                    stopAfterTaps = config.stopAfterTaps,
-                    hapticOnTap = config.hapticOnTap,
-                    flashOnTap = config.flashOnTap,
+                    cellIndex = cellIndex ?: current.cellIndex,
+                    intervalSeconds = current.intervalSeconds,
+                    stopAfterTaps = current.stopAfterTaps,
+                    hapticOnTap = current.hapticOnTap,
+                    flashOnTap = current.flashOnTap,
                     targetMode = mode,
-                    point = point,
+                    point = point ?: current.point,
                 ),
             )
             finish()
@@ -188,7 +188,7 @@ private fun ExactSpotLayer(
     areaProvider: () -> ScreenRect,
     existing: RelativePoint,
     marker: Offset?,
-    onPress: (Offset) -> Unit,
+    onPress: (Offset?) -> Unit,
     onPick: (RelativePoint) -> Unit,
 ) {
     val view = LocalView.current
@@ -200,7 +200,7 @@ private fun ExactSpotLayer(
                 detectTapGestures(
                     onPress = { offset ->
                         onPress(offset)
-                        tryAwaitRelease()
+                        if (!tryAwaitRelease()) onPress(null)
                     },
                     onTap = { offset ->
                         onPress(offset)

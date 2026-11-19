@@ -5,9 +5,11 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.Build
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -35,6 +37,7 @@ import com.activebook.autoclick.app.ui.overlay.HidePopover
 import com.activebook.autoclick.app.ui.overlay.PanelContent
 import kotlin.math.max
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -45,7 +48,7 @@ import kotlinx.coroutines.launch
  * engine's view of "does my own bubble sit on top of the target?".
  *
  * Window discipline
- * - bubble: 56dp, `FLAG_NOT_FOCUSABLE` (never steals IME or back), draggable, snaps to an edge.
+ * - bubble: 40dp, `FLAG_NOT_FOCUSABLE` (never steals IME or back), draggable, snaps to an edge.
  * - panel: separate window, created only while expanded, `WRAP_CONTENT` height.
  * - crosshair: `FLAG_NOT_TOUCHABLE`, invisible until a tap lands.
  *
@@ -63,6 +66,8 @@ class OverlayController(
     private val onStopTapping: () -> Unit,
     private val onOpenApp: () -> Unit,
     private val onHideHand: () -> Unit,
+    private val onUpdateConfig: (ClickerConfig) -> Unit,
+    private val onSaveBubblePosition: (Int, Int) -> Unit,
 ) : OverlayGuard {
 
     private val windowManager: WindowManager =
@@ -139,6 +144,10 @@ class OverlayController(
 
     private var observing = false
     private var boundsUpdateScheduled = false
+    private var snapAnimator: ValueAnimator? = null
+    private var observeJobs: List<Job> = emptyList()
+    private var restorePositionJob: Job? = null
+    private var userMovedBubble = false
 
     private val runningState = mutableStateOf(false)
     private val pausedState = mutableStateOf(false)
@@ -157,6 +166,7 @@ class OverlayController(
         val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
+        userMovedBubble = false
         val defaultX = (area.right - bubbleSizePx - edgeMarginPx).toInt()
         val defaultY = (area.top + area.height * 0.35f).toInt()
         createBubble(defaultX, defaultY)
@@ -165,6 +175,13 @@ class OverlayController(
     }
 
     fun hide() {
+        snapAnimator?.cancel()
+        snapAnimator = null
+        restorePositionJob?.cancel()
+        restorePositionJob = null
+        observeJobs.forEach { it.cancel() }
+        observeJobs = emptyList()
+        observing = false
         dismissHidePopover()
         collapsePanel()
         removeCrosshair()
@@ -183,10 +200,18 @@ class OverlayController(
         val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
+        snapAnimator?.cancel()
+        snapAnimator = null
+        dismissHidePopover()
+
         params.x = params.x.coerceIn(area.left.toInt(), max(area.left.toInt(), (area.right - bubbleSizePx).toInt()))
         params.y = params.y.coerceIn(area.top.toInt(), max(area.top.toInt(), (area.bottom - bubbleSizePx).toInt()))
         runCatching { windowManager.updateViewLayout(view, params) }
         if (panelExpanded) refreshPanelPlacement()
+        if (coordinator.state.value is ClickerState.Running) {
+            val usable = displayProvider.usableArea()
+            if (!usable.isEmpty) ensureCrosshair(configState.value.target.resolveIn(usable))
+        }
         updateBoundsNow()
     }
 
@@ -201,7 +226,16 @@ class OverlayController(
     }
 
     fun updateBoundsNow() {
-        bubbleBounds = bubbleView?.let { screenBoundsOf(it) }
+        bubbleBounds = bubbleView?.let { view ->
+            screenBoundsOf(view) ?: bubbleParams?.let {
+                ScreenRect(
+                    left = it.x.toFloat(),
+                    top = it.y.toFloat(),
+                    right = (it.x + bubbleSizePx).toFloat(),
+                    bottom = (it.y + bubbleSizePx).toFloat(),
+                )
+            }
+        }
         panelBounds = panelView?.let { screenBoundsOf(it) }
     }
 
@@ -221,6 +255,8 @@ class OverlayController(
                         // A fresh touch on the hand dismisses an open hide menu (the scrim would
                         // catch it anyway once the finger lifts, but a drag should clear it now).
                         dismissHidePopover()
+                        snapAnimator?.cancel()
+                        snapAnimator = null
                         dragDownScreenX = x
                         dragDownScreenY = y
                         dragAnchorWindowX = bubbleParams?.x ?: 0
@@ -269,6 +305,8 @@ class OverlayController(
         val area = displayProvider.overlayArea()
         if (area.isEmpty) return
 
+        userMovedBubble = true
+
         val minX = area.left.toInt()
         val maxX = max(minX, (area.right - bubbleSizePx).toInt())
         val minY = area.top.toInt()
@@ -307,17 +345,28 @@ class OverlayController(
             (area.right - bubbleSizePx - edgeMarginPx).toInt()
         }
 
+        snapAnimator?.cancel()
+        snapAnimator = null
+
         val startX = params.x
         if (startX != snapX) {
-            ValueAnimator.ofInt(startX, snapX).apply {
+            snapAnimator = ValueAnimator.ofInt(startX, snapX).apply {
                 duration = 140L
+                var cancelled = false
                 addUpdateListener { animation ->
+                    if (bubbleView !== view) return@addUpdateListener
                     params.x = animation.animatedValue as Int
                     runCatching { windowManager.updateViewLayout(view, params) }
                     if (panelExpanded) refreshPanelPlacement()
                 }
                 addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationCancel(animation: Animator) {
+                        cancelled = true
+                    }
+
                     override fun onAnimationEnd(animation: Animator) {
+                        if (snapAnimator === animation) snapAnimator = null
+                        if (cancelled || bubbleView !== view) return
                         persistBubblePosition(params.x, params.y)
                         if (panelExpanded) {
                             refreshPanelPlacement()
@@ -335,7 +384,7 @@ class OverlayController(
     }
 
     private fun persistBubblePosition(x: Int, y: Int) {
-        scope.launch { repository.saveBubblePosition(x, y) }
+        onSaveBubblePosition(x, y)
     }
 
     /**
@@ -357,7 +406,7 @@ class OverlayController(
         val next = transform(current)
         if (next == current) return
         configState.value = next
-        scope.launch { repository.updateConfig(next) }
+        onUpdateConfig(next)
     }
 
     private fun onBubbleTap() {
@@ -504,7 +553,7 @@ class OverlayController(
         }
         params.x = preferredX
             .coerceIn(area.left.toInt(), max(area.left.toInt(), (area.right - panelWidthPx).toInt()))
-        // The controls page is ~130dp tall, the settings page ~298dp. Anchoring on the 108dp
+        // The controls page is ~130dp tall, the settings page ~298dp. Anchoring on the 56dp
         // estimate is fine before the first measure and wrong forever after: dragging the hand
         // with the settings page open left the panel 285px off-centre. Use the measured height
         // whenever there is one, and let the layout listener keep it fresh.
@@ -648,7 +697,7 @@ class OverlayController(
             return existing
         }
 
-        val area = displayProvider.overlayArea()
+        val area = displayProvider.usableArea()
         if (area.isEmpty) return null
 
         val view = CrosshairView(context)
@@ -700,12 +749,12 @@ class OverlayController(
         if (observing) return
         observing = true
 
-        scope.launch {
+        val stateJob = scope.launch {
             combine(coordinator.state, configFlow) { state, config -> state to config }
                 .collect { (state, config) -> render(state, config) }
         }
 
-        scope.launch {
+        val tapJob = scope.launch {
             coordinator.tapEvents.collect { point ->
                 // Drive the countdown ring off the same delivered-tap signal as the crosshair
                 // flash, so the ring resets exactly when a tap lands — independent of whether
@@ -714,9 +763,12 @@ class OverlayController(
                 flashTap(point)
             }
         }
+
+        observeJobs = listOf(stateJob, tapJob)
     }
 
     private fun render(state: ClickerState, config: ClickerConfig) {
+        if (!isShowing) return
         runningState.value = state is ClickerState.Running
         pausedState.value = (state as? ClickerState.Running)?.paused == true
         finishedState.value = state is ClickerState.Finished
@@ -727,7 +779,7 @@ class OverlayController(
             // The marker must show what the engine is aiming at *now*: an exact point is not a
             // cell centre, and showing the cell's centre would be a lie the user has no way to
             // disprove — it is their only evidence of where the tap went.
-            val area = displayProvider.overlayArea()
+            val area = displayProvider.usableArea()
             if (!area.isEmpty) ensureCrosshair(config.target.resolveIn(area))
         } else {
             removeCrosshair()
@@ -735,6 +787,7 @@ class OverlayController(
     }
 
     private fun flashTap(point: ScreenPoint) {
+        if (!isShowing) return
         val config = configFlow.value
         if (config.flashOnTap) {
             // [point] is where the tap actually landed, so the marker goes straight there —
@@ -750,7 +803,12 @@ class OverlayController(
     }
 
     private fun vibrate() {
-        val vibrator = context.getSystemService(Vibrator::class.java) ?: return
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Vibrator::class.java)
+        } ?: return
         if (!vibrator.hasVibrator()) return
         runCatching {
             vibrator.vibrate(VibrationEffect.createOneShot(30L, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -795,21 +853,23 @@ class OverlayController(
     }
 
     private fun restoreSavedPosition() {
-        scope.launch {
-            val saved = repository.bubblePosition.first()
+        restorePositionJob?.cancel()
+        restorePositionJob = scope.launch {
+            val saved = repository.bubblePosition.first() ?: return@launch
+            if (userMovedBubble) return@launch
             val params = bubbleParams ?: return@launch
             val view = bubbleView ?: return@launch
             val area = displayProvider.overlayArea()
             if (area.isEmpty) return@launch
 
-            params.x = saved?.x?.coerceIn(
+            params.x = saved.x.coerceIn(
                 area.left.toInt(),
                 max(area.left.toInt(), (area.right - bubbleSizePx).toInt()),
-            ) ?: params.x
-            params.y = saved?.y?.coerceIn(
+            )
+            params.y = saved.y.coerceIn(
                 area.top.toInt(),
                 max(area.top.toInt(), (area.bottom - bubbleSizePx).toInt()),
-            ) ?: params.y
+            )
 
             runCatching { windowManager.updateViewLayout(view, params) }
             if (panelExpanded) refreshPanelPlacement()

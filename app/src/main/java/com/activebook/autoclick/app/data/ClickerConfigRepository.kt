@@ -35,16 +35,15 @@ class ClickerConfigRepository(context: Context) {
 
     private val dataStore = context.applicationContext.clickerDataStore
 
-    val config: Flow<ClickerConfig> = dataStore.data
+    private val safeData: Flow<Preferences> = dataStore.data
         .catch { throwable ->
             if (throwable is IOException) emit(emptyPreferences()) else throw throwable
         }
+
+    val config: Flow<ClickerConfig> = safeData
         .map { preferences -> preferences.toConfig() }
 
-    val bubblePosition: Flow<OverlayPosition?> = dataStore.data
-        .catch { throwable ->
-            if (throwable is IOException) emit(emptyPreferences()) else throw throwable
-        }
+    val bubblePosition: Flow<OverlayPosition?> = safeData
         .map { preferences ->
             val x = preferences[Keys.BUBBLE_X]
             val y = preferences[Keys.BUBBLE_Y]
@@ -56,10 +55,7 @@ class ClickerConfigRepository(context: Context) {
      * permission (ADR-021): hiding the hand also stops the run, so this is never a silent
      * "headless" mode. Defaults to shown; an older store without the key behaves as before.
      */
-    val handVisible: Flow<Boolean> = dataStore.data
-        .catch { throwable ->
-            if (throwable is IOException) emit(emptyPreferences()) else throw throwable
-        }
+    val handVisible: Flow<Boolean> = safeData
         .map { preferences -> preferences[Keys.HAND_VISIBLE] ?: true }
 
     suspend fun setHandVisible(visible: Boolean) {

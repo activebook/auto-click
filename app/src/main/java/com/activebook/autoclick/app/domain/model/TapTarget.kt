@@ -29,17 +29,5 @@ data class TapTarget(
             cellIndex = GridGeometry.CENTER_CELL_INDEX,
             point = RelativePoint.Center,
         )
-
-        fun cell(cellIndex: Int): TapTarget = TapTarget(
-            mode = TargetMode.CELL,
-            cellIndex = cellIndex.coerceIn(0, GridGeometry.CELL_COUNT - 1),
-            point = RelativePoint.Center,
-        )
-
-        fun point(cellIndex: Int, point: RelativePoint): TapTarget = TapTarget(
-            mode = TargetMode.POINT,
-            cellIndex = cellIndex.coerceIn(0, GridGeometry.CELL_COUNT - 1),
-            point = point,
-        )
     }
 }

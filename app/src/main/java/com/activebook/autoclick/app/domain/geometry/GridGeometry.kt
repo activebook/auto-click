@@ -17,6 +17,11 @@ data class ScreenRect(
     val center: ScreenPoint get() = ScreenPoint(left + width / 2f, top + height / 2f)
     val isEmpty: Boolean get() = width <= 0f || height <= 0f
 
+    /**
+     * Returns whether [point] sits inside or on the boundary of this rectangle.
+     * [right] and [bottom] are checked inclusively (`<=`) on purpose for defensive overlay-overlap
+     * checks so a target on an edge is still treated as covered.
+     */
     fun contains(point: ScreenPoint): Boolean =
         point.x >= left && point.x <= right && point.y >= top && point.y <= bottom
 }

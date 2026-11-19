@@ -75,16 +75,13 @@ class ClickerCoordinator(
         guard = overlayGuard
     }
 
-    val isRunning: Boolean
-        get() = synchronized(lock) { ticker != null }
-
     /**
      * Starts a run. Preconditions are validated up front so that a refusal always carries a
      * reason the UI can explain, instead of failing silently on the first tick.
      */
     fun start() {
         synchronized(lock) {
-            if (ticker != null) return
+            if (ticker != null || paused) return
 
             val sink = sinkProvider()
             if (sink == null || !sink.isConnected) {
@@ -191,6 +188,9 @@ class ClickerCoordinator(
                 sessionTarget = newTarget
                 sessionIntervalMs = config.intervalMs
                 sessionBudget = config.stopAfterTaps
+                if (paused && sessionBudget > 0 && tapCount.get() >= sessionBudget.toLong()) {
+                    finishLocked()
+                }
                 return
             }
             sessionBudget = config.stopAfterTaps
@@ -225,7 +225,8 @@ class ClickerCoordinator(
     /** Called when the accessibility service attaches or detaches. */
     fun onSinkChanged() {
         synchronized(lock) {
-            if (sinkProvider() != null) {
+            val sink = sinkProvider()
+            if (sink != null && sink.isConnected) {
                 // A service that has just attached proves the earlier "disconnected" is over. The
                 // error is deliberately sticky while the sink is gone, but it must not outlive the
                 // condition it describes: a stale banner on top of a working permission is the
@@ -236,7 +237,7 @@ class ClickerCoordinator(
                 }
                 return
             }
-            if (ticker != null) failLocked(FailureReason.SERVICE_DISCONNECTED)
+            if (ticker != null || paused) failLocked(FailureReason.SERVICE_DISCONNECTED)
         }
     }
 

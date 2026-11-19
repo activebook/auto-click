@@ -42,7 +42,15 @@ class TapTargetTest {
 
     @Test
     fun `switching to a point keeps the last cell, so going back is one tap`() {
-        val target = TapTarget.point(cellIndex = 7, point = RelativePoint.of(0.1f, 0.9f))
+        val target = ClickerConfig.of(
+            cellIndex = 7,
+            intervalMs = 1000L,
+            stopAfterTaps = 0,
+            hapticOnTap = true,
+            flashOnTap = true,
+            targetMode = TargetMode.POINT,
+            point = RelativePoint.of(0.1f, 0.9f),
+        ).target
 
         assertEquals(7, target.cellIndex)
         assertEquals(TargetMode.POINT, target.mode)
@@ -74,7 +82,13 @@ class TapTargetTest {
 
     @Test
     fun `a cell out of range is clamped, not thrown`() {
-        val target = TapTarget.cell(cellIndex = 99)
+        val target = ClickerConfig.of(
+            cellIndex = 99,
+            intervalMs = 1000L,
+            stopAfterTaps = 0,
+            hapticOnTap = true,
+            flashOnTap = true,
+        ).target
 
         assertEquals(8, target.cellIndex)
         assertEquals(TargetMode.CELL, target.mode)
