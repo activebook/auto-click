@@ -1,5 +1,6 @@
 package com.activebook.autoclick.app
 
+import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.os.SystemClock
 import com.activebook.autoclick.app.core.ClickSink
@@ -9,6 +10,9 @@ import com.activebook.autoclick.app.data.ClickerConfigRepository
 import com.activebook.autoclick.app.domain.model.ClickerConfig
 import com.activebook.autoclick.app.platform.AndroidDisplayProvider
 import com.activebook.autoclick.app.platform.HandlerTicker
+import com.activebook.autoclick.app.platform.OverlayPermissionWatcher
+import com.activebook.autoclick.app.platform.Permissions
+import com.activebook.autoclick.app.service.OverlayService
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,9 +30,34 @@ import kotlinx.coroutines.launch
  */
 class AppContainer(context: Context) {
 
+    private data class AccessibilityBinding(
+        val service: AccessibilityService,
+        val sink: ClickSink,
+    )
+
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val sinkReference = AtomicReference<ClickSink?>(null)
+    private val accessibilityBinding = AtomicReference<AccessibilityBinding?>(null)
+
+    private val overlayPermissionWatcher = OverlayPermissionWatcher.forContext(
+        context = appContext,
+        scope = scope,
+    ) {
+        if (Permissions.hasAccessibilityService(appContext) || hasAccessibilitySink) {
+            setHandVisible(true)
+            runCatching { OverlayService.requestShow(appContext) }
+        }
+    }
+
+    val hasAccessibilitySink: Boolean
+        get() = accessibilityBinding.get()?.sink?.isConnected == true
+
+    /**
+     * Live connected [AccessibilityService] instance used to host `TYPE_ACCESSIBILITY_OVERLAY`
+     * windows so overlays remain visible over Settings screens that hide non-system overlays.
+     */
+    val accessibilityHost: AccessibilityService?
+        get() = accessibilityBinding.get()?.service
 
     val repository = ClickerConfigRepository(appContext)
     val displayProvider: DisplayProvider = AndroidDisplayProvider(appContext)
@@ -47,7 +76,7 @@ class AppContainer(context: Context) {
     val coordinator: ClickerCoordinator = ClickerCoordinator(
         configProvider = { config.value },
         displayProvider = displayProvider,
-        sinkProvider = { sinkReference.get() },
+        sinkProvider = { accessibilityBinding.get()?.sink },
         tickerFactory = { intervalMs, onTick ->
             HandlerTicker(
                 intervalMs = intervalMs,
@@ -81,17 +110,30 @@ class AppContainer(context: Context) {
     }
 
     /** Called by the accessibility service when it connects. */
-    fun setClickSink(sink: ClickSink) {
-        sinkReference.set(sink)
+    fun attachAccessibility(service: AccessibilityService, sink: ClickSink) {
+        accessibilityBinding.set(AccessibilityBinding(service, sink))
         coordinator.onSinkChanged()
     }
+
+    /** Watches for overlay permission grant so the floating hand appears immediately. */
+    fun watchForOverlayGrant(withFallbackPoll: Boolean) =
+        overlayPermissionWatcher.start(withFallbackPoll)
+
+    /** Stops watching for overlay permission grant once granted or no longer needed. */
+    fun stopWatchingForOverlayGrant() = overlayPermissionWatcher.cancel()
 
     /**
      * Called when a service instance goes away. Compare-and-set on purpose: a service can be
      * rebound before the previous instance finishes unbinding, and the late `onDestroy` of the old
      * instance must not withdraw the sink the new one just published.
      */
-    fun clearClickSink(sink: ClickSink) {
-        if (sinkReference.compareAndSet(sink, null)) coordinator.onSinkChanged()
+    fun detachAccessibility(service: AccessibilityService, sink: ClickSink): Boolean {
+        val current = accessibilityBinding.get()
+        val cleared = current != null &&
+            current.service === service &&
+            current.sink === sink &&
+            accessibilityBinding.compareAndSet(current, null)
+        if (cleared) coordinator.onSinkChanged()
+        return cleared
     }
 }

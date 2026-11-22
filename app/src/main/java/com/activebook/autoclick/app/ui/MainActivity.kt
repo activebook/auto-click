@@ -16,7 +16,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -90,15 +93,38 @@ class MainActivity : ComponentActivity() {
                 if (fixed) container.coordinator.acknowledgeError()
             }
 
+            LaunchedEffect(permissions.overlay, permissions.accessibility) {
+                if (!permissions.overlay && permissions.accessibility) {
+                    container.watchForOverlayGrant(withFallbackPoll = false)
+                } else if (permissions.overlay) {
+                    container.stopWatchingForOverlayGrant()
+                }
+            }
+
             // The hand follows the overlay permission AND the user's visibility preference
             // (ADR-021 amends ADR-016). Wait for DataStore to emit before acting so cold-start
-            // never clobbers a stored `false`. Requesting detach when permission goes away stops
-            // the service without overwriting the stored preference.
-            LaunchedEffect(permissions.overlay, handVisible) {
+            // never clobbers a stored `false`. Whenever a required permission transitions to
+            // granted, force the hand back on so the user sees immediate confirmation it works.
+            var lastOverlayGranted by rememberSaveable { mutableStateOf(permissions.overlay) }
+            var lastAccessibilityGranted by rememberSaveable { mutableStateOf(permissions.accessibility) }
+
+            LaunchedEffect(permissions.overlay, permissions.accessibility, handVisible) {
                 val visible = handVisible ?: return@LaunchedEffect
-                if (permissions.overlay && visible) {
+                val decision = reconcileHandVisibility(
+                    overlayGranted = permissions.overlay,
+                    wasOverlayGranted = lastOverlayGranted,
+                    accessibilityGranted = permissions.accessibility,
+                    wasAccessibilityGranted = lastAccessibilityGranted,
+                    handVisible = visible,
+                    overlayCurrentlyShown = OverlayService.isOverlayVisible.value,
+                )
+                lastOverlayGranted = permissions.overlay
+                lastAccessibilityGranted = permissions.accessibility
+
+                if (decision.persistHandVisibleTrue) container.setHandVisible(true)
+                if (decision.showOverlay) {
                     OverlayService.requestShow(this@MainActivity)
-                } else if (OverlayService.isOverlayVisible.value) {
+                } else if (decision.detachOverlay) {
                     OverlayService.requestDetach(this@MainActivity)
                 }
             }
@@ -205,7 +231,11 @@ class MainActivity : ComponentActivity() {
 
     /** Opens the floating-window screen, where the overlay permission is granted. */
     private fun openOverlay() {
+        if (!Permissions.hasOverlayPermission(this)) {
+            container.watchForOverlayGrant(withFallbackPoll = true)
+        }
         if (!Permissions.openOverlaySettings(this)) {
+            container.stopWatchingForOverlayGrant()
             Toast.makeText(
                 this,
                 "This ROM has no floating window screen — look for \"Display over other apps\" " +
@@ -255,6 +285,11 @@ class MainActivity : ComponentActivity() {
         // The user is back in the app: stop the second hand-off line from popping over our screen.
         handoffActive = false
         handoffHandler.removeCallbacksAndMessages(null)
+        if (!Permissions.hasOverlayPermission(this)) {
+            container.watchForOverlayGrant(withFallbackPoll = false)
+        } else {
+            container.stopWatchingForOverlayGrant()
+        }
     }
 
     override fun onStop() {

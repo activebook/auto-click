@@ -55,7 +55,7 @@ AutoClick is a quiet, focused auto-tapper built for everyday repetitive taps —
 1. **Download** the latest `.apk` file from the **Releases** page and open it on your phone.
 2. **Allow unknown apps** when your phone asks if your browser or file manager can install apps.
 3. **Allow restricted settings (Android 13 or newer):** open your phone's **Settings → Apps → AutoClick**, tap the **⋮** menu in the corner, and choose **Allow restricted settings**.
-4. **Turn on the two required switches** — **Accessibility ("AutoClick taps")** and **Display over other apps**. AutoClick opens each settings screen for you and guides you straight to its row.
+4. **Turn on the two required switches** — **Accessibility ("AutoClick taps")** and **Display over other apps**. AutoClick opens each settings screen for you and guides you straight to its row. The floating hand appears right away as soon as both are on.
 
 ---
 

@@ -152,6 +152,7 @@ fun MainScreen(
 
         // Always visible (not folded into Advanced) so the hand can be brought back from here
         // after it was hidden. Hiding stops the run; this switch is the way back (ADR-021).
+        val canShowHand = permissions.overlay && permissions.accessibility
         SectionCard(
             title = "Floating hand",
             subtitle = null,
@@ -159,13 +160,16 @@ fun MainScreen(
             SwitchRow(
                 label = "Show floating hand",
                 hint = when {
+                    !permissions.overlay && !permissions.accessibility ->
+                        "Needs Accessibility and \"Display over other apps\" first."
                     !permissions.overlay -> "Needs \"Display over other apps\" first."
+                    !permissions.accessibility -> "Needs Accessibility first."
                     handVisible -> "The hand floats over other apps."
                     else -> "Hidden. Turn on to bring it back."
                 },
-                checked = handVisible && permissions.overlay,
+                checked = handVisible && canShowHand,
                 onCheckedChange = onToggleHand,
-                enabled = permissions.overlay,
+                enabled = canShowHand,
             )
         }
 

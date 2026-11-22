@@ -136,10 +136,13 @@ the only unit where an auto-tapper's behaviour is predictable to a human without
 
 ## 4. The floating hand
 
-The hand is the app's presence. Its visibility follows **both** the *Display over other apps*
-permission and the user's `Show floating hand` preference (ADR-021): hiding the hand also stops any
-active run so a tap loop is never left running unseen without a way to stop it, and pressing Start
-re-shows the hand automatically.
+The hand is the app's presence. Its visibility follows **both** required permissions (*Display
+over other apps* **and** *Accessibility: AutoClick taps*) together with the user's `Show floating hand`
+preference (ADR-021): hiding the hand also stops any active run so a tap loop is never left running
+unseen without a way to stop it. Whenever both permissions become granted — whether toggled from
+Android's **Accessibility Shortcut Button**, Settings, or the app — the hand appears immediately
+without needing to reopen AutoClick (including right on top of Settings via `TYPE_ACCESSIBILITY_OVERLAY`);
+whenever either permission is revoked, the hand hides and stops tapping immediately.
 
 ### 4.1 Form
 
@@ -243,7 +246,8 @@ trap (ADR-021).
 |---|---|
 | Long-press the hand | Hide popover (eye-off card + scrim). Eye → stop + remove hand + wind the service down. Any other tap dismisses the popover (1.6.3; replaces the old panel-settings row). The popover is the one deliberately **dark** control (1.6.5), distinct from the white/green hand and panel |
 | Notification | `Hide hand` action while the service is alive (same effect) |
-| App settings page | `Show floating hand` switch — the way back. Always visible (not folded), disabled until the overlay permission is held |
+| App settings page | `Show floating hand` switch — the way back. Always visible (not folded), disabled until both required permissions are held |
+| Permission grant | Enabling `Display over other apps` or `Accessibility: AutoClick taps` (via Settings or Android's Accessibility Button) shows the hand immediately once both are on, and revoking either hides it immediately |
 | Start (app / notification / panel) | Re-shows the hand automatically: a run always has a visible hand to stop it |
 
 While the popover is open its scrim owns the screen, so the tap guard skips every tick (an open
@@ -281,7 +285,7 @@ padding, title `titleMedium`, subtitle `bodySmall` in `onSurfaceVariant`.
 | 2 | **Status** | State dot + one of `Tapping` / `Paused` / `Finished` / `Needs attention` / `Idle`; right side `Every 3s`; **no detail paragraph** — the word and the button already say everything, and a failure sentence appears only on error; the primary **Start tapping / Stop tapping** button (52 dp, full width) |
 | 3 | Permission CTA (only while something required is missing) | `Tapping needs both of these:` then one orange button per missing requirement, in fixed order: `Enable Accessibility`, `Enable Display over other apps` |
 | 4 | **Before you start** *(while incomplete)* | The four permission switches, expanded, directly under Status |
-| 5 | **Floating hand** *(1.6.2)* | Always visible; `Show floating hand` switch. On: `The hand floats over other apps.` Off: `Hidden. Turn on to bring it back.` Without the overlay permission: disabled, `Needs "Display over other apps" first.` |
+| 5 | **Floating hand** *(1.6.2)* | Always visible; `Show floating hand` switch. On: `The hand floats over other apps.` Off: `Hidden. Turn on to bring it back.` Disabled when required permissions are missing: `Needs Accessibility and "Display over other apps" first.`, `Needs "Display over other apps" first.`, or `Needs Accessibility first.` |
 | 6 | **Where to tap** | 132 dp nine-grid + `Row 2, column 2 (center)` + `Its centre is pressed.`, then `Pick a cell` / `Pick exact spot`; in exact mode a pin instead of a highlight and `Exact spot` + `65% · 34% from the top-left of the screen` |
 | 7 | **Interval** | Preset chips, seconds field + `Apply`, `1–3600 s`, a divider, then **Stop after** chips `Never / 1 / 3 / 5 / 10 / 100`, a `Taps` field + `Apply` (`0–100000 taps · 0 = never`), and one explanatory line |
 | 8 | **Advanced** | Folded by default; `Vibrate` + `Flash marker` |

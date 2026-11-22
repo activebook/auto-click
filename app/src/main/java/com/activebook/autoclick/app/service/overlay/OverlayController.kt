@@ -48,6 +48,9 @@ import kotlinx.coroutines.launch
  * engine's view of "does my own bubble sit on top of the target?".
  *
  * Window discipline
+ * - Uses `TYPE_ACCESSIBILITY_OVERLAY` when hosted by the connected
+ *   `AutoClickAccessibilityService` (so overlays appear immediately even over Settings screens that
+ *   force-hide non-system overlays), falling back to `TYPE_APPLICATION_OVERLAY` otherwise.
  * - bubble: 40dp, `FLAG_NOT_FOCUSABLE` (never steals IME or back), draggable, snaps to an edge.
  * - panel: separate window, created only while expanded, `WRAP_CONTENT` height.
  * - crosshair: `FLAG_NOT_TOUCHABLE`, invisible until a tap lands.
@@ -57,6 +60,7 @@ import kotlinx.coroutines.launch
  */
 class OverlayController(
     private val context: Context,
+    private val windowType: Int = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
     private val coordinator: ClickerCoordinator,
     private val configFlow: StateFlow<ClickerConfig>,
     private val repository: ClickerConfigRepository,
@@ -273,7 +277,7 @@ class OverlayController(
         val params = WindowManager.LayoutParams(
             bubbleSizePx,
             bubbleSizePx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -490,7 +494,7 @@ class OverlayController(
         val params = WindowManager.LayoutParams(
             panelWidthPx,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -606,7 +610,7 @@ class OverlayController(
         val scrimParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
@@ -626,7 +630,7 @@ class OverlayController(
         val popoverParams = WindowManager.LayoutParams(
             hidePopoverSizePx,
             hidePopoverSizePx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -705,7 +709,7 @@ class OverlayController(
         val params = WindowManager.LayoutParams(
             crosshairSizePx,
             crosshairSizePx,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,

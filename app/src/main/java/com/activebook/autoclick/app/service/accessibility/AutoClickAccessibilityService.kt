@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import com.activebook.autoclick.app.AutoClickApplication
+import com.activebook.autoclick.app.platform.Permissions
+import com.activebook.autoclick.app.service.OverlayService
 
 /**
  * The only component with the privilege to inject touches.
@@ -21,7 +23,13 @@ class AutoClickAccessibilityService : AccessibilityService() {
         val container = (application as? AutoClickApplication)?.container ?: return
         val newSink = AccessibilityClickSink(this)
         sink = newSink
-        container.setClickSink(newSink)
+        container.attachAccessibility(this, newSink)
+        if (Permissions.hasOverlayPermission(this)) {
+            container.setHandVisible(true)
+            runCatching { OverlayService.requestShow(this) }
+        } else {
+            container.watchForOverlayGrant(withFallbackPoll = false)
+        }
     }
 
     /** Intentionally ignored: AutoClick never reads what is on screen. */
@@ -48,6 +56,8 @@ class AutoClickAccessibilityService : AccessibilityService() {
         val current = sink ?: return
         sink = null
         current.disconnect()
-        (application as? AutoClickApplication)?.container?.clearClickSink(current)
+        val container = (application as? AutoClickApplication)?.container ?: return
+        val cleared = container.detachAccessibility(this, current)
+        OverlayService.detachHost(this, stopService = cleared)
     }
 }

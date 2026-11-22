@@ -1,5 +1,6 @@
 package com.activebook.autoclick.app.service
 
+import android.app.AppOpsManager
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,6 +16,7 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.os.IBinder
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -28,6 +30,8 @@ import com.activebook.autoclick.app.platform.Permissions
 import com.activebook.autoclick.app.service.overlay.OverlayController
 import com.activebook.autoclick.app.ui.MainActivity
 import com.activebook.autoclick.app.ui.failureMessage
+import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,7 +55,9 @@ class OverlayService : Service() {
 
     private lateinit var scope: CoroutineScope
     private var overlay: OverlayController? = null
+    private var overlayHostContext: Context? = null
     private var screenReceiverRegistered = false
+    private var overlayOpListener: AppOpsManager.OnOpChangedListener? = null
 
     /** Whether this run has a bubble window; false when the overlay permission is missing. */
     private var bubbleAvailable = false
@@ -85,6 +91,8 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = WeakReference(this)
+        serviceRunning.set(true)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         createNotificationChannel()
         // Must happen before any other work: a foreground service has ~5s to post its
@@ -93,27 +101,69 @@ class OverlayService : Service() {
 
         attachBubble()
         registerScreenReceiver()
+        registerOverlayRevokeWatcher()
         registerComponentCallbacks(configurationCallbacks)
         observeState()
     }
 
     /**
-     * Puts the hand on screen if the overlay permission is held *and* the user allows the hand
-     * (ADR-021 amends ADR-016: visibility is permission AND a user preference). [force] bypasses
-     * the preference for an explicit Start/Show, which must never leave a silent headless run.
+     * Puts the hand on screen if the overlay permission is held, accessibility is active, *and*
+     * the user allows the hand (ADR-021 amends ADR-016: visibility is permissions AND preference).
+     * [force] bypasses the preference for an explicit Start/Show, which must never leave a silent
+     * headless run.
      *
-     * Callable at runtime, not just once in [onCreate], so "grant the permission while a session
-     * is already running" still works: the tapping continues and the hand simply appears.
+     * Callable at runtime, not just once in [onCreate], so granting a permission immediately shows
+     * the floating hand without returning to the app.
      *
      * @return whether a bubble is on screen afterwards.
      */
     private fun attachBubble(force: Boolean = false): Boolean {
-        if (overlay != null) return true
+        val accessibilityHost = container().accessibilityHost
+        val desiredHost: Context = accessibilityHost ?: this
+        val desiredType = if (accessibilityHost != null) {
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        } else {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        }
+
+        if (overlay != null) {
+            if (overlayHostContext === desiredHost) return true
+            detachOverlayViewsOnly()
+        }
         if (!force && container().handVisible.value != true) return false
         if (!Permissions.hasOverlayPermission(this)) return false
+        if (!Permissions.hasAccessibilityService(this) && !container().hasAccessibilitySink) return false
 
+        var actualHost = desiredHost
+        val controller = try {
+            createAndShowOverlay(desiredHost, desiredType)
+        } catch (primaryError: RuntimeException) {
+            if (desiredHost === this) {
+                container().coordinator.reportFailure(FailureReason.NO_OVERLAY_PERMISSION, primaryError.message)
+                return false
+            }
+            actualHost = this
+            try {
+                createAndShowOverlay(this, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            } catch (fallbackError: RuntimeException) {
+                container().coordinator.reportFailure(FailureReason.NO_OVERLAY_PERMISSION, fallbackError.message)
+                return false
+            }
+        }
+
+        overlay = controller
+        overlayHostContext = actualHost
+        bubbleAvailable = true
+        container().coordinator.setGuard(controller)
+        overlayVisible.value = true
+        publishNotification(container().coordinator.state.value)
+        return true
+    }
+
+    private fun createAndShowOverlay(hostContext: Context, windowType: Int): OverlayController {
         val controller = OverlayController(
-            context = this,
+            context = hostContext,
+            windowType = windowType,
             coordinator = container().coordinator,
             configFlow = container().config,
             repository = container().repository,
@@ -129,23 +179,16 @@ class OverlayService : Service() {
             onUpdateConfig = { container().updateConfig(it) },
             onSaveBubblePosition = { x, y -> container().saveBubblePosition(x, y) },
         )
-
         try {
             controller.show()
             if (!controller.isShowing) {
                 throw IllegalStateException("The bubble window was not created")
             }
         } catch (error: RuntimeException) {
-            container().coordinator.reportFailure(FailureReason.NO_OVERLAY_PERMISSION, error.message)
-            return false
+            controller.hide()
+            throw error
         }
-
-        overlay = controller
-        bubbleAvailable = true
-        container().coordinator.setGuard(controller)
-        overlayVisible.value = true
-        publishNotification(container().coordinator.state.value)
-        return true
+        return controller
     }
 
     /**
@@ -170,17 +213,23 @@ class OverlayService : Service() {
             }
     }
 
+    /** Removes the overlay windows without stopping a running session (used when swapping window hosts). */
+    private fun detachOverlayViewsOnly() {
+        overlay?.hide()
+        overlay = null
+        overlayHostContext = null
+        bubbleAvailable = false
+        container().coordinator.setGuard(null)
+        overlayVisible.value = false
+    }
+
     /**
      * Takes the hand away. The system strips our windows when the permission is revoked, and the
      * guard cannot protect a target it can no longer see, so a running session is stopped too.
      */
     private fun releaseBubble() {
-        overlay?.hide()
-        overlay = null
-        bubbleAvailable = false
-        container().coordinator.setGuard(null)
+        detachOverlayViewsOnly()
         container().coordinator.stop()
-        overlayVisible.value = false
     }
 
     /**
@@ -200,7 +249,7 @@ class OverlayService : Service() {
             ACTION_HIDE -> hideHand()
             ACTION_DETACH -> {
                 releaseBubble()
-                stopSelf()
+                stopSelf(startId)
             }
             ACTION_START -> {
                 // Starting implies the hand should be visible (you need it to stop): clear a
@@ -213,14 +262,14 @@ class OverlayService : Service() {
             ACTION_SHOW -> {
                 // No bubble and no permission: do not sit here pretending to be useful.
                 if (!attachBubble(force = true)) {
-                    stopSelf()
+                    stopSelf(startId)
                     return START_NOT_STICKY
                 }
             }
             null -> {
                 scope.launch {
                     if (!container().repository.handVisible.first() || !attachBubble(force = true)) {
-                        stopSelf()
+                        stopSelf(startId)
                     }
                 }
             }
@@ -231,6 +280,9 @@ class OverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        if (activeInstance?.get() === this) activeInstance = null
+        serviceRunning.set(false)
+        unregisterOverlayRevokeWatcher()
         if (screenReceiverRegistered) {
             runCatching { unregisterReceiver(screenReceiver) }
             screenReceiverRegistered = false
@@ -241,6 +293,7 @@ class OverlayService : Service() {
         container().coordinator.setGuard(null)
         overlay?.hide()
         overlay = null
+        overlayHostContext = null
         bubbleAvailable = false
         overlayVisible.value = false
         scope.cancel()
@@ -378,9 +431,44 @@ class OverlayService : Service() {
         screenReceiverRegistered = true
     }
 
+    private fun registerOverlayRevokeWatcher() {
+        val appOps = getSystemService(AppOpsManager::class.java) ?: return
+        val listener = AppOpsManager.OnOpChangedListener { _, packageName ->
+            if ((packageName == null || packageName == this.packageName) &&
+                !Permissions.hasOverlayPermission(this)
+            ) {
+                scope.launch(Dispatchers.Main) {
+                    releaseBubble()
+                    container().watchForOverlayGrant(withFallbackPoll = false)
+                    stopSelf()
+                }
+            }
+        }
+        if (runCatching {
+                appOps.startWatchingMode(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    packageName,
+                    listener,
+                )
+            }.isSuccess
+        ) {
+            overlayOpListener = listener
+        }
+    }
+
+    private fun unregisterOverlayRevokeWatcher() {
+        val listener = overlayOpListener ?: return
+        overlayOpListener = null
+        val appOps = getSystemService(AppOpsManager::class.java) ?: return
+        runCatching { appOps.stopWatchingMode(listener) }
+    }
+
     private fun container(): AppContainer = (application as AutoClickApplication).container
 
     companion object {
+        @Volatile
+        private var activeInstance: WeakReference<OverlayService>? = null
+        private val serviceRunning = AtomicBoolean(false)
         const val ACTION_START = "com.activebook.autoclick.app.action.START"
         const val ACTION_SHOW = "com.activebook.autoclick.app.action.SHOW"
         const val ACTION_STOP = "com.activebook.autoclick.app.action.STOP"
@@ -412,8 +500,30 @@ class OverlayService : Service() {
 
         /** Detaches the bubble and stops the service without altering the user's hand preference. */
         fun requestDetach(context: Context) {
+            if (!serviceRunning.get()) return
             val intent = Intent(context, OverlayService::class.java).setAction(ACTION_DETACH)
             runCatching { context.startService(intent) }
+        }
+
+        /**
+         * Synchronously detaches overlay windows attached to [host]'s window token before the
+         * system invalidates that token during `AccessibilityService.onUnbind`/`onDestroy`
+         * (preventing `WindowLeaked`), and stops the service when the departing host was active.
+         * Must be called on the main thread.
+         */
+        fun detachHost(host: Context, stopService: Boolean) {
+            val instance = activeInstance?.get()
+            if (instance != null) {
+                when {
+                    stopService -> {
+                        instance.releaseBubble()
+                        instance.stopSelf()
+                    }
+                    instance.overlayHostContext === host -> instance.detachOverlayViewsOnly()
+                }
+            } else if (stopService) {
+                requestDetach(host)
+            }
         }
 
         /** Shows the bubble without starting a session. */

@@ -25,8 +25,8 @@ android {
         applicationId = "com.activebook.autoclick.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.6.6"
+        versionCode = 14
+        versionName = "1.6.7"
     }
 
     signingConfigs {

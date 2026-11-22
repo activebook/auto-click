@@ -75,12 +75,12 @@ com.activebook.autoclick.app
 │   └── timing/    IntervalMath (anchor + rebase policy)
 ├── core/          Contracts (Ticker/ClickSink/DisplayProvider/OverlayGuard), ClickerCoordinator
 ├── data/          ClickerConfigRepository
-├── platform/      AndroidDisplayProvider, HandlerTicker, Permissions (detection + intents)
+├── platform/      AndroidDisplayProvider, HandlerTicker, OverlayPermissionWatcher, Permissions (detection + intents)
 ├── service/
 │   ├── accessibility/  AutoClickAccessibilityService, AccessibilityClickSink
 │   ├── overlay/        OverlayController, OverlayLifecycleOwner, CrosshairView
 │   └── OverlayService.kt
-├── ui/            MainActivity, MainScreen, PermissionSnapshot, FailureMessages, theme, components
+├── ui/            MainActivity, MainScreen, HandVisibilityPolicy, PermissionSnapshot, FailureMessages, theme, components
 │   ├── overlay/   OverlayContent (BubbleContent, HidePopover, PanelContent, SettingsPanel, PanelMode)
 │   └── grid/      GridPickerActivity
 └── AppContainer.kt, AutoClickApplication.kt
@@ -171,14 +171,21 @@ without touching a `View` off the main thread.
   `StrokeDescription`, one `GestureResultCallback` → `TapResult.DELIVERED / CANCELLED`. It is
   idempotent per call (`AtomicBoolean`), runs on the main looper, and reports `false` when the system
   refuses a second concurrent gesture.
-- Service lifecycle maps to the engine: `onServiceConnected` publishes its sink, `onUnbind` /
-  `onDestroy` withdraw it, and the next tick fails fast with `SERVICE_DISCONNECTED` instead of
-  spamming exceptions.
+- Service lifecycle maps to the engine and overlay presence: `onServiceConnected` publishes both the
+  service host and click sink via `attachAccessibility(this, newSink)` and — when `Display over other
+  apps` is held — immediately resets `hand_visible = true` and invokes `OverlayService.requestShow`
+  (showing the floating hand right away via `TYPE_ACCESSIBILITY_OVERLAY`, whether enabled manually in
+  Android Settings or from Android's Accessibility Shortcut Button, without returning to `MainActivity`);
+  otherwise it arms `OverlayPermissionWatcher`. `onUnbind` / `onDestroy` withdraw the binding via
+  `detachAccessibility(this, current)` (returning `true` only if *that* instance held the active binding)
+  and synchronously invoke `OverlayService.detachHost(this, stopService = cleared)` before the system
+  invalidates the service's window token, avoiding `WindowLeaked` and failing any live run fast with
+  `SERVICE_DISCONNECTED`.
 - **A disconnect is a state, not a tombstone.** The system unbinds and rebinds this service on its
   own schedule — a reinstall, a permission toggle, some ROMs every few seconds. Two invariants keep
-  that survivable: an instance withdraws *only its own* sink (`sinkReference.compareAndSet`), so the
-  late `onDestroy` of an old instance cannot null the sink a newer one just published; and any
-  attach clears a pending `SERVICE_DISCONNECTED` error, because the condition it names is over.
+  that survivable: an instance withdraws *only its own* binding (`accessibilityBinding.compareAndSet`), so
+  the late `onDestroy` of an old instance cannot null the sink or host a newer one just published; and
+  any attach clears a pending `SERVICE_DISCONNECTED` error, because the condition it names is over.
   Measured on the test device, a rebind cycle used to leave the banner `The accessibility service
   disconnected. Re-enable it to keep tapping.` on screen for the life of the process while
   `settings get secure enabled_accessibility_services` still listed the service and no *Enable*
@@ -195,15 +202,22 @@ com.activebook.autoclick.app/com.activebook.autoclick.app.service.accessibility.
 ## 5. Overlay windows
 
 Three persistent windows, plus two transient ones while the hide popover is open. Every
-`WindowManager` call happens on the main thread.
+`WindowManager` call happens on the main thread. When `AutoClickAccessibilityService` is connected
+(the normal runtime state whenever the floating hand is allowed), all five windows are attached to
+the accessibility service's own `WindowManager` context using `TYPE_ACCESSIBILITY_OVERLAY` (so they
+render immediately even on top of Android's Accessibility Settings screens, which set
+`PRIVATE_FLAG_FORCE_HIDE_NON_SYSTEM_OVERLAY_WINDOWS` against `TYPE_APPLICATION_OVERLAY`), falling
+back to `TYPE_APPLICATION_OVERLAY` via `OverlayService` if the accessibility host is unavailable or
+rejects the window token. `AutoClickAccessibilityService.detach()` synchronously tears down windows
+owned by the departing service token before `onUnbind`/`onDestroy` returns to avoid `WindowLeaked`.
 
 | Window | Size | Type | Flags | Notes |
 |---|---|---|---|---|
-| Hand | 40 dp × 40 dp | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `NOT_TOUCH_MODAL`, `LAYOUT_IN_SCREEN`, `HARDWARE_ACCELERATED` | `NOT_FOCUSABLE` is mandatory: otherwise it steals the IME and the back key |
-| Panel | 200 dp × `WRAP_CONTENT` | `TYPE_APPLICATION_OVERLAY` | same four | Created only while expanded; `WRAP_CONTENT` height means any layout change moves the anchor |
-| Crosshair | 30 dp × 30 dp | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `NOT_TOUCHABLE`, `LAYOUT_IN_SCREEN` | `NOT_TOUCHABLE` is what keeps a decorative marker from eating taps |
-| Hide popover (1.6.3) | 44 dp × 44 dp | `TYPE_APPLICATION_OVERLAY` | same four as panel | Only while long-press menu open; the single eye-off button |
-| Hide scrim (1.6.3) | `MATCH_PARENT` | `TYPE_APPLICATION_OVERLAY` | `NOT_FOCUSABLE`, `LAYOUT_IN_SCREEN` (touchable) | Only while the popover is open; catches "tap anywhere else" to dismiss. While open the guard skips every tick so no tap lands in it |
+| Hand | 40 dp × 40 dp | `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_APPLICATION_OVERLAY`) | `NOT_FOCUSABLE`, `NOT_TOUCH_MODAL`, `LAYOUT_IN_SCREEN`, `HARDWARE_ACCELERATED` | `NOT_FOCUSABLE` is mandatory: otherwise it steals the IME and the back key |
+| Panel | 200 dp × `WRAP_CONTENT` | `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_APPLICATION_OVERLAY`) | same four | Created only while expanded; `WRAP_CONTENT` height means any layout change moves the anchor |
+| Crosshair | 30 dp × 30 dp | `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_APPLICATION_OVERLAY`) | `NOT_FOCUSABLE`, `NOT_TOUCHABLE`, `LAYOUT_IN_SCREEN` | `NOT_TOUCHABLE` is what keeps a decorative marker from eating taps |
+| Hide popover (1.6.3) | 44 dp × 44 dp | `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_APPLICATION_OVERLAY`) | same four as panel | Only while long-press menu open; the single eye-off button |
+| Hide scrim (1.6.3) | `MATCH_PARENT` | `TYPE_ACCESSIBILITY_OVERLAY` (fallback `TYPE_APPLICATION_OVERLAY`) | `NOT_FOCUSABLE`, `LAYOUT_IN_SCREEN` (touchable) | Only while the popover is open; catches "tap anywhere else" to dismiss. While open the guard skips every tick so no tap lands in it |
 
 All are `PixelFormat.TRANSLUCENT`, `gravity = TOP|START`. Horizontal placement/clamping uses
 `DisplayProvider.overlayArea()` (full display width, vertical system-bar insets kept) with
@@ -271,8 +285,8 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
 | `ACTION_STOP` | `coordinator.stop()` |
 | `ACTION_SHOW` | Attach the bubble if permission allows; without overlay permission calls `stopSelf()` rather than claiming a hand it cannot draw |
 | `ACTION_HIDE` | Detach the bubble, stop the run, persist `hand_visible = false` via `AppContainer`, `stopSelf()` |
-| `ACTION_DETACH` | Detach the bubble, stop the run, and `stopSelf()` **without** modifying `hand_visible` (used when overlay permission is lost or revoked) |
-| `null` (system restart) | Re-read `hand_visible` from DataStore and re-attach the bubble if permitted and enabled; otherwise `stopSelf()` |
+| `ACTION_DETACH` | Detach the bubble, stop the run, and `stopSelf(startId)` **without** modifying `hand_visible` (used when overlay permission is lost or revoked) |
+| `null` (system restart) | Re-read `hand_visible` from DataStore and re-attach the bubble if permitted and enabled; otherwise `stopSelf(startId)` |
 
 - Notification: channel `autoclick_status` (low importance), id `4711`, two actions
   (`Stop`/`Start` via `REQUEST_TOGGLE = 10`, and `Hide hand` via `REQUEST_HIDE = 12`), content intent `REQUEST_OPEN = 11`.
@@ -284,8 +298,14 @@ at the screen bottom, where the 894 px page is clamped — physically unavoidabl
   → `resume()`, and `ACTION_SCREEN_ON` → `resume()` when `KeyguardManager.isKeyguardLocked == false`
   (covering devices with Screen Lock = None). No wakelock, so a locked phone never taps and never drains.
 - Bubble lifecycle is a runtime attach/detach (`attachBubble()` is idempotent, `releaseBubble()`), gated
-  by overlay permission AND the persisted `hand_visible` preference (ADR-021), with process-scoped
-  DataStore writes via `AppContainer` so `stopSelf()` never cancels an in-flight write.
+  by **both** `SYSTEM_ALERT_WINDOW` and Accessibility (`hasAccessibilityService` / `hasAccessibilitySink`)
+  AND the persisted `hand_visible` preference (ADR-021), with process-scoped DataStore writes via
+  `AppContainer` so `stopSelf()` / `stopSelf(startId)` never cancels an in-flight write.
+  `AutoClickAccessibilityService` calls `requestShow` / `requestDetach` directly on CAS-verified
+  connect/disconnect, `OverlayService` registers an `AppOpsManager.OnOpChangedListener` to detach and
+  `stopSelf()` immediately if overlay permission is revoked externally, `OverlayPermissionWatcher`
+  shows the hand immediately when overlay permission is granted, and `HandVisibilityPolicy` keeps the
+  activity state in sync. `stopSelf(startId)` guards rapid detach-to-show transitions in `onStartCommand`.
 
 ---
 
@@ -329,6 +349,15 @@ position, the activity writes config, both through the same repository instance.
 state (`repeatOnLifecycle(Lifecycle.State.STARTED)`), so returning from a system screen updates rows,
 badge and card position immediately without polling in the background.
 
+While `Display over other apps` is missing and Accessibility is active (or while opening overlay
+Settings), `OverlayPermissionWatcher` keeps an event-driven `AppOpsManager.startWatchingMode`
+listener (`OPSTR_SYSTEM_ALERT_WINDOW`, zero idle CPU) armed and adds a bounded 250 ms fallback poll
+(up to 120 s) when leaving via `openOverlay()`, so flipping the system toggle in Settings launches
+`OverlayService.requestShow` immediately while still on the Settings screen (exempted from background
+FGS restrictions via `SYSTEM_ALERT_WINDOW`). Similarly, toggling `AutoClick taps` via Settings or
+Android's Accessibility Shortcut Button triggers `AutoClickAccessibilityService.onServiceConnected` /
+`detach` to show or hide the floating hand immediately without ever launching `MainActivity`.
+
 ### 8.1 Opening the accessibility screen **on our row**
 
 The documented per-service API, `ACTION_ACCESSIBILITY_DETAILS_SETTINGS` +
@@ -360,11 +389,13 @@ to the plain list plus the fallback Toast.
 
 ### 8.2 The hand-off notice: a Toast, not a window
 
-When our activity is backgrounded behind Settings, an `TYPE_APPLICATION_OVERLAY` window is force-hidden
-by the accessibility screen (`mForceHideNonSystemOverlayWindow=true`, set through
+Before Accessibility is granted and while our activity is backgrounded behind Settings, an
+`TYPE_APPLICATION_OVERLAY` window is force-hidden by the accessibility screen
+(`mForceHideNonSystemOverlayWindow=true`, set through
 `PRIVATE_FLAG_FORCE_HIDE_NON_SYSTEM_OVERLAY_WINDOWS`). Window dumps show `isVisible=false`,
 `Surface: shown=false` — the window exists and is invisible, which is why "the window is in the list"
-is not evidence of anything.
+is not evidence of anything. Once Accessibility connects, however, the floating hand attaches via
+`TYPE_ACCESSIBILITY_OVERLAY` and renders immediately over Accessibility Settings itself.
 
 A text Toast is drawn by the system UI process in its own window (`ty=TOAST`), so the flag does not
 apply. The usual Android 11+ restriction on background Toasts is lifted by the `SYSTEM_ALERT_WINDOW`
@@ -384,13 +415,13 @@ the whole hand-off.
 ## 9. Build, versioning, artifacts
 
 ```bash
-./gradlew :app:testDebugUnitTest   # 60 tests
+./gradlew :app:testDebugUnitTest   # 74 tests
 ./gradlew :app:lintDebug           # 0 errors
 ./gradlew :app:assembleDebug       # debug APK  (+ refresh dist/AutoClick-<version>-debug.apk)
 ./gradlew :app:assembleRelease     # R8 release  (+ refresh dist/AutoClick-<version>.apk)
 ```
 
-- `versionCode = 13`, `versionName = "1.6.6"`. A name bump without a code bump is refused by the
+- `versionCode = 14`, `versionName = "1.6.7"`. A name bump without a code bump is refused by the
   project's own invariant.
 - Gradle's artifact keeps AGP's canonical name `app-<variant>.apk` because Studio's Run,
   `installDebug` and most CI scripts resolve exactly that path; renaming inside `build/` is only
@@ -412,7 +443,7 @@ the whole hand-off.
 
 | Gate | Result |
 |---|---|
-| `:app:testDebugUnitTest` | **60 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest` |
+| `:app:testDebugUnitTest` | **74 tests, 0 failures** across `GridGeometryTest`, `IntervalMathTest`, `ClickerConfigTest`, `ClickerCoordinatorTest`, `RelativePointTest`, `TapTargetTest`, `HandVisibilityPolicyTest`, `OverlayPermissionWatcherTest` |
 | `:app:lintDebug` | **0 errors, 0 code warnings**; 13 dependency-version notices |
 
 What the unit tests actually pin: cell centres sit at 1/6, 3/6, 5/6 of the usable area; insets
@@ -493,7 +524,7 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 | Accessibility is user-granted and OEM-revocable | A reinstall unbinds the service; some ROMs unbind on `force-stop` | Honest `n of 4` badge, orange CTA, one-line fix sentences |
 | Android 13+ sideload blocks the toggle | Switch appears greyed out | `Greyed out? App info › Allow restricted settings.` shown while Accessibility is off |
 | A reinstall can reset overlay + notifications on some ROMs | Hand missing after an update for a reason unrelated to the service | The checklist reports the truth; nothing is auto-flipped |
-| Accessibility screens force-hide app overlays | No custom notice can be drawn there | System Toasts (ADR-018) |
+| Accessibility screens force-hide app overlays | No custom `TYPE_APPLICATION_OVERLAY` notice can be drawn before Accessibility is granted | System Toasts (ADR-018) pre-grant; `TYPE_ACCESSIBILITY_OVERLAY` post-grant so the floating hand appears over Settings immediately |
 | Aggressive ROM killers | FGS may be killed in long soaks | Battery row, ongoing notification, state reconciliation on resume |
 | No root / no shell by policy | No silent permission granting | Deliberate: the app stays installable and usable by a normal user |
 | Play Store policy | Accessibility-based tapping is not distributable there | Sideloaded APK, documented |
@@ -505,9 +536,9 @@ adb shell dumpsys accessibility | grep -E "Bound services|capabilities"
 ```
 auto-click/
 ├─ app/src/main/java/com/activebook/autoclick/app/   domain / core / data / platform / service / ui
-├─ app/src/test/java/...                             6 test classes, 60 JVM tests
+├─ app/src/test/java/...                             8 test classes, 74 JVM tests
 ├─ app/src/main/res/                                 strings (English), themes, icons, XML configs
-├─ dist/                                             AutoClick-1.6.6.apk (tracked release copy; -debug.apk is git-ignored)
+├─ dist/                                             AutoClick-1.6.7.apk (tracked release copy; -debug.apk is git-ignored)
 ├─ docs/DESIGN.md                                    product + interaction design
 ├─ docs/TECH.md                                      this file
 ├─ docs/PLAN.md                                      requirements, ADRs, round-by-round history
